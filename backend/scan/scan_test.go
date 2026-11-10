@@ -23,12 +23,17 @@ type fakeOCR struct {
 	results []tesseract.Result
 	err     error
 	calls   int
+	opts    []tesseract.Options
 }
 
-func (f *fakeOCR) Read(ctx context.Context, png []byte) (tesseract.Result, error) {
+func (f *fakeOCR) Read(ctx context.Context, png []byte, opts tesseract.Options) (tesseract.Result, error) {
 	f.calls++
+	f.opts = append(f.opts, opts)
 	if f.err != nil {
 		return tesseract.Result{}, f.err
+	}
+	if f.calls > len(f.results) {
+		return tesseract.Result{}, nil // a read nobody scripted finds nothing
 	}
 	return f.results[f.calls-1], nil
 }
@@ -106,11 +111,27 @@ func TestScan_thresholdUsesTheExtractedWords(t *testing.T) {
 		wantSearch []tcg.Query
 	}{
 		{
-			// Band mean is about 80, carried by the copyright strip, but the
-			// number itself was read at 46: it must not count.
-			name:       "confident boilerplate does not vouch for a shaky number",
+			// A whitelisted number read reports confidence 0 (or any value), so
+			// it is validated by its pattern and the card lookup instead.
+			name:       "number confidence is not used",
 			nameRead:   read("Pikachu", 90),
-			numberRead: words(w("O25/l65", 46), w("Pokemon", 90), w("Nintendo", 93), w("Creatures", 90)),
+			numberRead: words(w("025/165", 0), w("Pokemon", 5), w("Nintendo", 3)),
+			wantStatus: StatusMatch,
+			wantFind:   [][2]string{{"Pikachu", "025"}},
+		},
+		{
+			// Real Tesseract output for a tight crop of a Mareep card: the
+			// BASIC label and energy symbol come out as low-confidence junk.
+			name:       "low-confidence junk words are dropped before reading the name",
+			nameRead:   words(w("Re", 1.5), w("Mareep", 74.8), w("+e", 0), w("/", 20), w("OO", 20)),
+			numberRead: read("027/086", 0),
+			wantStatus: StatusMatch,
+			wantFind:   [][2]string{{"Mareep", "027"}},
+		},
+		{
+			name:       "a number that is not a number is unread whatever its confidence",
+			nameRead:   read("Pikachu", 90),
+			numberRead: words(w("DC", 95), w("UKUMO", 90)),
 			wantStatus: StatusRetake, wantReason: ReasonNumberUnreadable,
 			wantSearch: []tcg.Query{{Name: "Pikachu"}},
 		},
@@ -343,4 +364,78 @@ func TestScan_errors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestScan_readsEachBandWithItsOwnOptions(t *testing.T) {
+	o := &fakeOCR{results: []tesseract.Result{read("Pikachu", 90), read("025/165", 0)}}
+	_, err := New(o, &fakeCards{find: cards(1)}, &fakeSpecies{}).Scan(context.Background(), bytes.NewReader(cardPNG(t)))
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	want := []tesseract.Options{tesseract.NameOptions, tesseract.NumberOptions}
+	if !reflect.DeepEqual(o.opts, want) {
+		t.Errorf("OCR options = %+v, want name then number: %+v", o.opts, want)
+	}
+}
+
+func TestScan_retriesTheNameInBlockModeWhenSingleLineFindsNothing(t *testing.T) {
+	w := func(text string, conf float64) tesseract.Word { return tesseract.Word{Text: text, Confidence: conf} }
+	// Real output for a Mareep card: single-line mode found nothing, block mode
+	// found the name among stray marks.
+	blockMode := words(w("=", 41), w("Mareep", 71), w(".", 70), w("w/0'", 0), w("@", 49), w("q", 49), w("ee", 34))
+	o := &fakeOCR{results: []tesseract.Result{{}, read("027/086", 0), blockMode}}
+	c := &fakeCards{find: cards(1)}
+	got, err := New(o, c, &fakeSpecies{}).Scan(context.Background(), bytes.NewReader(cardPNG(t)))
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if got.Status != StatusMatch {
+		t.Errorf("status = %q (reason %q), want match", got.Status, got.Reason)
+	}
+	if want := [][2]string{{"Mareep", "027"}}; !reflect.DeepEqual(c.findArgs, want) {
+		t.Errorf("FindCards calls = %v, want %v", c.findArgs, want)
+	}
+	wantOpts := []tesseract.Options{tesseract.NameOptions, tesseract.NumberOptions, tesseract.NameFallbackOptions}
+	if !reflect.DeepEqual(o.opts, wantOpts) {
+		t.Errorf("OCR options = %+v, want %+v", o.opts, wantOpts)
+	}
+}
+
+func TestScan_doesNotRetryTheNameWhenTheFirstReadWorked(t *testing.T) {
+	o := &fakeOCR{results: []tesseract.Result{read("Pikachu", 90), read("025/165", 0)}}
+	New(o, &fakeCards{find: cards(1)}, &fakeSpecies{}).Scan(context.Background(), bytes.NewReader(cardPNG(t)))
+	if o.calls != 2 {
+		t.Errorf("OCR called %d times, want 2 (no retry)", o.calls)
+	}
+}
+
+func TestScan_stillAsksForARetakeWhenBothNameReadsFail(t *testing.T) {
+	o := &fakeOCR{results: []tesseract.Result{read("~~", 20), read("025/165", 0), read("##", 10)}}
+	c := &fakeCards{search: cards(1)}
+	got, err := New(o, c, &fakeSpecies{}).Scan(context.Background(), bytes.NewReader(cardPNG(t)))
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if got.Status != StatusRetake || got.Reason != ReasonNameUnreadable {
+		t.Errorf("status, reason = %q, %q; want retake, name_unreadable", got.Status, got.Reason)
+	}
+}
+
+func TestScan_aFailedNameRetryIsAnOCRError(t *testing.T) {
+	o := &failingOnThirdRead{fakeOCR: fakeOCR{results: []tesseract.Result{read("~~", 20), read("025/165", 0)}}}
+	_, err := New(o, &fakeCards{}, &fakeSpecies{}).Scan(context.Background(), bytes.NewReader(cardPNG(t)))
+	if !errors.Is(err, ErrOCR) {
+		t.Errorf("err = %v, want ErrOCR", err)
+	}
+}
+
+// failingOnThirdRead answers the first two reads like fakeOCR and fails the third.
+type failingOnThirdRead struct{ fakeOCR }
+
+func (f *failingOnThirdRead) Read(ctx context.Context, png []byte, opts tesseract.Options) (tesseract.Result, error) {
+	if f.calls >= 2 {
+		f.calls++
+		return tesseract.Result{}, errors.New("tesseract crashed")
+	}
+	return f.fakeOCR.Read(ctx, png, opts)
 }

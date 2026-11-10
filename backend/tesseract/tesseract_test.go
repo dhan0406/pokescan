@@ -45,7 +45,7 @@ func TestRead_argsAndStdin(t *testing.T) {
 	withTSV(t, header)
 
 	in := []byte("fake png bytes")
-	if _, err := fakeEngine(t).Read(context.Background(), in); err != nil {
+	if _, err := fakeEngine(t).Read(context.Background(), in, NameOptions); err != nil {
 		t.Fatalf("Read: %v", err)
 	}
 	args, _ := os.ReadFile(filepath.Join(dir, "args"))
@@ -58,12 +58,40 @@ func TestRead_argsAndStdin(t *testing.T) {
 	}
 }
 
+func TestRead_optionsBecomeArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		opts Options
+		want string
+	}{
+		{"name options", NameOptions, "stdin stdout --psm 7 tsv"},
+		{"number options: block mode with a character whitelist", NumberOptions, "stdin stdout --psm 6 -c tessedit_char_whitelist=0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ tsv"},
+		{"name fallback: block mode", NameFallbackOptions, "stdin stdout --psm 6 tsv"},
+		{"custom page mode, no whitelist", Options{PSM: 11}, "stdin stdout --psm 11 tsv"},
+		{"zero value defaults to single line", Options{}, "stdin stdout --psm 7 tsv"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := filepath.Join(t.TempDir(), "args")
+			t.Setenv("FAKE_ARGS_OUT", args)
+			withTSV(t, header)
+			if _, err := fakeEngine(t).Read(context.Background(), []byte("x"), tt.opts); err != nil {
+				t.Fatalf("Read: %v", err)
+			}
+			got, _ := os.ReadFile(args)
+			if strings.Join(strings.Fields(string(got)), " ") != tt.want {
+				t.Errorf("args = %q, want %q", strings.Fields(string(got)), tt.want)
+			}
+		})
+	}
+}
+
 func TestRead_parsesWordsAndConfidence(t *testing.T) {
 	withTSV(t, header+
 		"1\t1\t0\t0\t0\t0\t0\t0\t400\t60\t-1\t\n"+
 		"5\t1\t1\t1\t1\t1\t10\t5\t120\t40\t90.000000\tPikachu\n"+
 		"5\t1\t1\t1\t1\t2\t140\t5\t20\t40\t70.000000\tV\n")
-	got, err := fakeEngine(t).Read(context.Background(), []byte("x"))
+	got, err := fakeEngine(t).Read(context.Background(), []byte("x"), NameOptions)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -81,7 +109,7 @@ func TestRead_ignoresMinusOneRows(t *testing.T) {
 		"2\t1\t1\t0\t0\t0\t0\t0\t400\t60\t-1\t\n"+
 		"4\t1\t1\t1\t1\t0\t0\t0\t400\t60\t-1\t\n"+
 		"5\t1\t1\t1\t1\t1\t10\t5\t120\t40\t88.5\tSnorlax\n")
-	got, err := fakeEngine(t).Read(context.Background(), []byte("x"))
+	got, err := fakeEngine(t).Read(context.Background(), []byte("x"), NameOptions)
 	if err != nil || got.Text != "Snorlax" || got.Confidence != 88.5 || len(got.Words) != 1 {
 		t.Errorf("Read = %+v, %v; want {Snorlax 88.5}", got, err)
 	}
@@ -89,7 +117,7 @@ func TestRead_ignoresMinusOneRows(t *testing.T) {
 
 func TestRead_noWords(t *testing.T) {
 	withTSV(t, header+"1\t1\t0\t0\t0\t0\t0\t0\t400\t60\t-1\t\n")
-	got, err := fakeEngine(t).Read(context.Background(), []byte("x"))
+	got, err := fakeEngine(t).Read(context.Background(), []byte("x"), NameOptions)
 	if err != nil || got.Text != "" || got.Confidence != 0 || len(got.Words) != 0 {
 		t.Errorf("Read = %+v, %v; want zero Result, nil", got, err)
 	}
@@ -97,14 +125,14 @@ func TestRead_noWords(t *testing.T) {
 
 func TestRead_nonZeroExit(t *testing.T) {
 	t.Setenv("FAKE_EXIT", "1")
-	_, err := fakeEngine(t).Read(context.Background(), []byte("x"))
+	_, err := fakeEngine(t).Read(context.Background(), []byte("x"), NameOptions)
 	if err == nil || errors.Is(err, apierr.ErrTimeout) {
 		t.Errorf("err = %v, want a non-timeout error", err)
 	}
 }
 
 func TestRead_missingBinary(t *testing.T) {
-	_, err := Engine{Path: filepath.Join(t.TempDir(), "no-such-tesseract")}.Read(context.Background(), []byte("x"))
+	_, err := Engine{Path: filepath.Join(t.TempDir(), "no-such-tesseract")}.Read(context.Background(), []byte("x"), NameOptions)
 	if err == nil {
 		t.Error("err = nil, want an error")
 	}
@@ -115,7 +143,7 @@ func TestRead_timeout(t *testing.T) {
 	e := fakeEngine(t)
 	e.Timeout = 100 * time.Millisecond
 	start := time.Now()
-	_, err := e.Read(context.Background(), []byte("x"))
+	_, err := e.Read(context.Background(), []byte("x"), NameOptions)
 	if !errors.Is(err, apierr.ErrTimeout) {
 		t.Errorf("err = %v, want ErrTimeout", err)
 	}
@@ -129,7 +157,7 @@ func TestRead_cancelledContextKillsProcess(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(50*time.Millisecond, cancel)
 	start := time.Now()
-	_, err := fakeEngine(t).Read(ctx, []byte("x"))
+	_, err := fakeEngine(t).Read(ctx, []byte("x"), NameOptions)
 	if err == nil {
 		t.Error("err = nil, want an error")
 	}
@@ -151,7 +179,7 @@ func TestRead_realBinary(t *testing.T) {
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatal(err)
 	}
-	got, err := Engine{Path: path}.Read(context.Background(), buf.Bytes())
+	got, err := Engine{Path: path}.Read(context.Background(), buf.Bytes(), NameOptions)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}

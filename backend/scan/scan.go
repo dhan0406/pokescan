@@ -21,7 +21,7 @@ import (
 
 // OCR reads one line of text from a PNG.
 type OCR interface {
-	Read(ctx context.Context, png []byte) (tesseract.Result, error)
+	Read(ctx context.Context, png []byte, opts tesseract.Options) (tesseract.Result, error)
 }
 
 // CardSearcher finds TCG cards.
@@ -76,13 +76,34 @@ func New(o OCR, c CardSearcher, s SpeciesGetter) *Scanner {
 	return &Scanner{OCR: o, Cards: c, Species: s, Bands: imageprep.DefaultBands, MinConfidence: 60}
 }
 
-// numberKey extracts a number and total as one comparable string.
-func numberKey(text string) string {
-	n, t := ocr.ExtractNumber(text)
-	if n == "" {
+// noiseConfidence is the word confidence below which a word is treated as
+// stray marks (symbols, label fragments) and ignored when reading the name.
+const noiseConfidence = 50
+
+// readName returns the card name if it was extracted from confidently read
+// words, or "".
+func (s *Scanner) readName(r tesseract.Result) string {
+	var kept tesseract.Result
+	var texts []string
+	for _, w := range r.Words {
+		if w.Confidence < noiseConfidence {
+			continue
+		}
+		kept.Words = append(kept.Words, w)
+		texts = append(texts, w.Text)
+		kept.Confidence += w.Confidence
+	}
+	if len(kept.Words) == 0 {
 		return ""
 	}
-	return n + "/" + t
+	kept.Confidence /= float64(len(kept.Words))
+	kept.Text = strings.Join(texts, " ")
+
+	name := ocr.ExtractName(kept.Text)
+	if name == "" || sourceConfidence(kept, ocr.ExtractName, name) < s.MinConfidence {
+		return ""
+	}
+	return name
 }
 
 // sourceConfidence finds the shortest run of consecutive words from which
@@ -118,25 +139,31 @@ func (s *Scanner) Scan(ctx context.Context, img io.Reader) (Outcome, error) {
 		return Outcome{}, err
 	}
 
-	nameRead, err := s.OCR.Read(ctx, regions.Name)
+	nameRead, err := s.OCR.Read(ctx, regions.Name, tesseract.NameOptions)
 	if err != nil {
 		return Outcome{}, fmt.Errorf("%w: name band: %w", ErrOCR, err)
 	}
-	numberRead, err := s.OCR.Read(ctx, regions.Number)
+	numberRead, err := s.OCR.Read(ctx, regions.Number, tesseract.NumberOptions)
 	if err != nil {
 		return Outcome{}, fmt.Errorf("%w: number band: %w", ErrOCR, err)
 	}
 
-	// A field counts only if it was extracted and the words it came from were
-	// read confidently. The band's overall confidence is not used: the number
-	// band also holds the illustrator and copyright text, which can make a
-	// shaky number look confident or a clear one look shaky.
-	var name, number, total string
-	if n := ocr.ExtractName(nameRead.Text); n != "" && sourceConfidence(nameRead, ocr.ExtractName, n) >= s.MinConfidence {
-		name = n
-	}
-	if n, t := ocr.ExtractNumber(numberRead.Text); n != "" && sourceConfidence(numberRead, numberKey, n+"/"+t) >= s.MinConfidence {
-		number, total = n, t
+	// The name must be read confidently: only the words it was built from count,
+	// not the band's overall confidence, because the band also holds the stage
+	// label, HP and energy symbol. The number band is read with a character
+	// whitelist, which makes Tesseract report confidence 0 for good digits, so
+	// the number is validated by its pattern here and by the card lookup after.
+	name := s.readName(nameRead)
+	number, total := ocr.ExtractNumber(numberRead.Text)
+
+	// Single-line mode sometimes finds nothing on a small crop that block mode
+	// reads fine, so try the name once more before giving up on it.
+	if name == "" {
+		retry, err := s.OCR.Read(ctx, regions.Name, tesseract.NameFallbackOptions)
+		if err != nil {
+			return Outcome{}, fmt.Errorf("%w: name band retry: %w", ErrOCR, err)
+		}
+		name = s.readName(retry)
 	}
 
 	switch {
