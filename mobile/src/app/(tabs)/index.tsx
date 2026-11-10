@@ -2,6 +2,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { apiSetup } from '@/api';
+import { ScanCamera } from '@/components/ScanCamera';
 import { ServerStatus } from '@/components/ServerStatus';
 import { colors, spacing, type } from '@/theme/tokens';
 
@@ -10,7 +11,7 @@ export default function ScanScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.body}>
-          <Text style={styles.heading}>Can't find the server address</Text>
+          <Text style={styles.heading}>Can&apos;t find the server address</Text>
           <Text style={styles.error}>{apiSetup.message}</Text>
         </View>
       </SafeAreaView>
@@ -20,9 +21,7 @@ export default function ScanScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ServerStatus api={apiSetup.api} />
-      <View style={styles.body}>
-        <Text style={styles.heading}>Scan</Text>
-      </View>
+      <ScanCamera api={apiSetup.api} />
     </SafeAreaView>
   );
 }

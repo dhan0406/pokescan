@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 import type { ApiClient } from '@/api/client';
@@ -15,26 +15,23 @@ const LABELS: Record<Status, string> = {
 /** A small banner showing whether the backend answers. Tap to check again. */
 export function ServerStatus({ api }: { api: ApiClient }) {
   const [status, setStatus] = useState<Status>('checking');
-  const mounted = useRef(true);
-
-  const check = useCallback(async () => {
-    setStatus('checking');
-    let next: Status = 'connected';
-    try {
-      await api.ping();
-    } catch {
-      next = 'unreachable';
-    }
-    if (mounted.current) setStatus(next);
-  }, [api]);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    mounted.current = true;
-    check();
+    let cancelled = false; // ignore a late answer after unmount or a newer check
+    api.ping().then(
+      () => (cancelled ? undefined : setStatus('connected')),
+      () => (cancelled ? undefined : setStatus('unreachable')),
+    );
     return () => {
-      mounted.current = false;
+      cancelled = true;
     };
-  }, [check]);
+  }, [api, attempt]);
+
+  const check = () => {
+    setStatus('checking');
+    setAttempt((n) => n + 1);
+  };
 
   return (
     <Pressable onPress={check} accessibilityRole="button" style={styles.banner}>
