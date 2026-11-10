@@ -1,4 +1,4 @@
-import { createApiClient, type ApiClient } from './api/client';
+import { createApiClient, type ApiClient, type ApiClientOptions } from './api/client';
 
 const EXAMPLE = 'http://192.168.0.10:8080';
 
@@ -20,9 +20,12 @@ export function readApiUrl(env: { EXPO_PUBLIC_API_URL?: string }): string {
 export type ApiSetup = { ok: true; api: ApiClient } | { ok: false; message: string };
 
 /** Builds the API client, or returns the configuration problem so a screen can show it instead of crashing. */
-export function setupApi(env: { EXPO_PUBLIC_API_URL?: string }): ApiSetup {
+export function setupApi(
+  env: { EXPO_PUBLIC_API_URL?: string },
+  clientOptions: Omit<ApiClientOptions, 'baseUrl'> = {},
+): ApiSetup {
   try {
-    return { ok: true, api: createApiClient({ baseUrl: readApiUrl(env) }) };
+    return { ok: true, api: createApiClient({ ...clientOptions, baseUrl: readApiUrl(env) }) };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : String(e) };
   }

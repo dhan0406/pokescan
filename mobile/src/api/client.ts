@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import type { components } from './schema';
 
 export type ScanResponse = components['schemas']['ScanResponse'];
@@ -48,6 +50,11 @@ export type ApiClientOptions = {
   scanTimeoutMs?: number;
   /** Timeout for every other request. Default 10 s. */
   timeoutMs?: number;
+  /**
+   * Called with the path and the underlying error when a request fails before
+   * any reply arrives (the user only sees a plain message). For developers.
+   */
+  onError?: (path: string, error: unknown) => void;
 };
 
 export type ApiClient = {
@@ -85,9 +92,10 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       try {
         res = await doFetch(baseUrl + path, { method: o.method, body: o.body, signal: controller.signal });
         text = await res.text();
-      } catch {
+      } catch (e) {
         if (timedOut) throw new ApiError('timeout', CLIENT_MESSAGES.timeout);
         if (cancelled) throw new ApiError('network_error', 'Cancelled.');
+        opts.onError?.(path, e);
         throw new ApiError('network_error', CLIENT_MESSAGES.network_error);
       }
 
@@ -112,10 +120,11 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
     },
 
     async scan(photoUri, signal) {
+      // On SDK 58 the global fetch is expo/fetch, which uploads an
+      // expo-file-system File. React Native's older { uri, name, type } file
+      // object is not understood and the request fails before it is sent.
       const form = new FormData();
-      // React Native uploads a file by appending an object with a local uri.
-      // TypeScript's FormData type does not know about it, hence the cast.
-      form.append('image', { uri: photoUri, name: 'card.jpg', type: 'image/jpeg' } as unknown as Blob);
+      form.append('image', new File(photoUri));
       const body = await request('/v1/scan', { method: 'POST', body: form, timeoutMs: scanTimeoutMs, signal });
       if (!isObject(body) || typeof body.status !== 'string') {
         throw new ApiError('bad_response', CLIENT_MESSAGES.bad_response);

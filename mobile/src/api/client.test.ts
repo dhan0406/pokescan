@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import { ApiError, createApiClient } from './client';
 
 type Call = { url: string; init: RequestInit };
@@ -46,6 +48,15 @@ afterEach(() => {
   globalThis.FormData = RealFormData;
 });
 
+jest.mock('expo-file-system', () => ({
+  File: class {
+    uri: string;
+    constructor(uri: string) {
+      this.uri = uri;
+    }
+  },
+}));
+
 const BASE = 'http://192.168.1.5:8080';
 
 describe('ping', () => {
@@ -76,8 +87,14 @@ describe('scan', () => {
     expect(calls[0].init.method).toBe('POST');
     const headers = new Headers(calls[0].init.headers);
     expect(headers.has('Content-Type')).toBe(false);
+    // SDK 58's global fetch is expo/fetch, which uploads an expo-file-system File,
+    // not React Native's { uri, name, type } object.
     const body = calls[0].init.body as unknown as RecordingFormData;
-    expect(body.parts).toEqual([['image', { uri: 'file:///tmp/card.jpg', name: 'card.jpg', type: 'image/jpeg' }]]);
+    expect(body.parts).toHaveLength(1);
+    const [field, part] = body.parts[0];
+    expect(field).toBe('image');
+    expect(part).toBeInstanceOf(File);
+    expect((part as { uri: string }).uri).toBe('file:///tmp/card.jpg');
   });
 
   it.each([
@@ -144,6 +161,35 @@ describe('scan', () => {
     const pending = createApiClient({ baseUrl: BASE, fetch: hangingFetch() }).scan('file:///x.jpg', controller.signal);
     controller.abort();
     await expect(pending).rejects.toMatchObject({ code: 'network_error', message: 'Cancelled.' });
+  });
+});
+
+describe('onError', () => {
+  it('reports the underlying failure while the user still sees the plain message', async () => {
+    const boom = new TypeError('Network request failed');
+    const fetch = jest.fn(async () => {
+      throw boom;
+    }) as unknown as typeof globalThis.fetch;
+    const onError = jest.fn();
+    const err = await createApiClient({ baseUrl: BASE, fetch, onError }).scan('file:///x.jpg').catch((e) => e);
+    expect(onError).toHaveBeenCalledWith('/v1/scan', boom);
+    expect(err.message).not.toContain('Network request failed');
+  });
+
+  it('is not called for errors the server reported', async () => {
+    const { fetch } = fakeFetch(() => json({ code: 'bad_image', message: 'Nope.' }, 400));
+    const onError = jest.fn();
+    await createApiClient({ baseUrl: BASE, fetch, onError }).scan('file:///x.jpg').catch(() => undefined);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('is not called when the caller cancels', async () => {
+    const controller = new AbortController();
+    const onError = jest.fn();
+    const pending = createApiClient({ baseUrl: BASE, fetch: hangingFetch(), onError }).scan('file:///x.jpg', controller.signal);
+    controller.abort();
+    await pending.catch(() => undefined);
+    expect(onError).not.toHaveBeenCalled();
   });
 });
 
