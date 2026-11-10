@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/dhan0406/pokescan/backend/apierr"
 )
@@ -22,6 +23,29 @@ const maxBody = 5 << 20 // 5 MiB
 // timeout is ErrTimeout, and any other failure is ErrUpstream. A cancelled
 // context is returned as an error that matches context.Canceled.
 func Get(ctx context.Context, hc *http.Client, url string, header http.Header, out any) error {
+	// The card services fail intermittently with 5xx; these are quick failures,
+	// so retry a couple of times before giving up.
+	for attempt := 1; ; attempt++ {
+		err := get(ctx, hc, url, header, out)
+		if !errors.Is(err, errRetryable) || attempt == maxAttempts {
+			return err
+		}
+		select {
+		case <-time.After(retryDelay):
+		case <-ctx.Done():
+			return classify(ctx.Err())
+		}
+	}
+}
+
+const (
+	maxAttempts = 3
+	retryDelay  = 400 * time.Millisecond
+)
+
+var errRetryable = errors.New("retryable")
+
+func get(ctx context.Context, hc *http.Client, url string, header http.Header, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("%w: build request: %v", apierr.ErrUpstream, err)
@@ -41,6 +65,8 @@ func Get(ctx context.Context, hc *http.Client, url string, header http.Header, o
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
 		return fmt.Errorf("%w: GET %s", apierr.ErrNotFound, url)
+	case resp.StatusCode >= 500 && resp.StatusCode <= 504:
+		return fmt.Errorf("%w: GET %s: status %d: %w", apierr.ErrUpstream, url, resp.StatusCode, errRetryable)
 	case resp.StatusCode < 200 || resp.StatusCode > 299:
 		return fmt.Errorf("%w: GET %s: status %d", apierr.ErrUpstream, url, resp.StatusCode)
 	}
