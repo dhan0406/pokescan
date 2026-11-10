@@ -1,0 +1,13 @@
+services:
+  api:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      CACHE_TTL: "24h"
+      # Uncomment to keep scanned photos for tuning (also uncomment the volume).
+      # SAVE_UPLOADS_DIR: /uploads
+    # volumes:
+    #   - ./uploads:/uploads
+    restart: unless-stopped
