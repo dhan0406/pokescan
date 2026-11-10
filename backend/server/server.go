@@ -3,12 +3,17 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
+	"github.com/dhan0406/pokescan/backend/imageprep"
 	"github.com/dhan0406/pokescan/backend/pokeapi"
 	"github.com/dhan0406/pokescan/backend/scan"
+	"github.com/dhan0406/pokescan/backend/tcg"
 )
 
 // Scanner runs a scan on an uploaded image.
@@ -55,8 +60,71 @@ func (s *server) pokemon(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toPokemon(sp))
 }
 
+const (
+	maxUpload   = 10 << 20 // 10 MB
+	scanTimeout = 20 * time.Second
+)
+
 func (s *server) scan(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, ErrorBody{Code: "not_implemented", Message: "Not implemented yet."})
+	r.Body = http.MaxBytesReader(w, r.Body, maxUpload)
+	if err := r.ParseMultipartForm(maxUpload); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, s.log, err)
+			return
+		}
+		writeError(w, s.log, fmt.Errorf("%w: %v", imageprep.ErrBadImage, err))
+		return
+	}
+	defer r.MultipartForm.RemoveAll()
+
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		writeError(w, s.log, fmt.Errorf("%w: %v", imageprep.ErrBadImage, err))
+		return
+	}
+	defer file.Close()
+	if header.Size == 0 {
+		writeError(w, s.log, fmt.Errorf("%w: empty image", imageprep.ErrBadImage))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), scanTimeout)
+	defer cancel()
+	out, err := s.scanner.Scan(ctx, file)
+	if err != nil {
+		writeError(w, s.log, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toScanResponse(out))
+}
+
+func toScanResponse(o scan.Outcome) ScanResponse {
+	resp := ScanResponse{Status: o.Status, Reason: o.Reason}
+	if o.Card != nil {
+		c := toCard(*o.Card)
+		resp.Card = &c
+	}
+	if o.Pokemon != nil {
+		p := toPokemon(*o.Pokemon)
+		resp.Pokemon = &p
+	}
+	for _, c := range o.Candidates {
+		resp.Candidates = append(resp.Candidates, toCard(c))
+	}
+	return resp
+}
+
+func toCard(c tcg.Card) Card {
+	return Card{
+		ID:        c.ID,
+		Name:      c.Name,
+		Number:    c.Number,
+		SetName:   c.SetName,
+		SetTotal:  c.SetTotal,
+		ImageURL:  c.ImageURL,
+		DexNumber: c.DexNumber,
+	}
 }
 
 // toPokemon maps a species to its API shape, using empty arrays and maps
