@@ -41,7 +41,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:api": "npx --yes openapi-typescript@7.13.0 ../openapi.yaml -o src/api/schema.d.ts"
   },
   "private": true,
   "jest": {
