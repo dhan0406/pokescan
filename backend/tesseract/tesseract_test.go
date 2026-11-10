@@ -65,7 +65,6 @@ func TestRead_optionsBecomeArguments(t *testing.T) {
 		want string
 	}{
 		{"name options", NameOptions, "stdin stdout --psm 7 tsv"},
-		{"number options: block mode with a character whitelist", NumberOptions, "stdin stdout --psm 6 -c tessedit_char_whitelist=0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ tsv"},
 		{"name fallback: block mode", NameFallbackOptions, "stdin stdout --psm 6 tsv"},
 		{"custom page mode, no whitelist", Options{PSM: 11}, "stdin stdout --psm 11 tsv"},
 		{"zero value defaults to single line", Options{}, "stdin stdout --psm 7 tsv"},

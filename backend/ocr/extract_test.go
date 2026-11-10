@@ -31,30 +31,3 @@ func TestExtractName(t *testing.T) {
 		})
 	}
 }
-
-func TestExtractNumber(t *testing.T) {
-	tests := []struct {
-		name       string
-		text       string
-		wantNumber string
-		wantTotal  string
-	}{
-		{"clean number", "004/165", "004", "165"},
-		{"spaces around slash", "004 / 165", "004", "165"},
-		{"surrounded by other text", "Illus. Mitsuhiro Arita 004/165 ★", "004", "165"},
-		{"letter O and l read as digits", "O04/l65", "004", "165"},
-		{"promo with no total", "SWSH123", "SWSH123", ""},
-		{"trainer gallery", "TG05/TG30", "TG05", "TG30"},
-		{"skips slash that is not a number", "and/or 025/198", "025", "198"},
-		{"empty text", "", "", ""},
-		{"no number present", "Illus. Mitsuhiro Arita", "", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			n, total := ExtractNumber(tt.text)
-			if n != tt.wantNumber || total != tt.wantTotal {
-				t.Errorf("ExtractNumber(%q) = (%q, %q), want (%q, %q)", tt.text, n, total, tt.wantNumber, tt.wantTotal)
-			}
-		})
-	}
-}

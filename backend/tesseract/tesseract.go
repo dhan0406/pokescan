@@ -39,8 +39,7 @@ type Engine struct {
 
 // Options choose how Tesseract reads an image.
 type Options struct {
-	PSM       int    // page segmentation mode; 0 means 7 (a single text line)
-	Whitelist string // if set, only these characters are recognized
+	PSM int // page segmentation mode; 0 means 7 (a single text line)
 }
 
 // NameOptions reads the card name band: one line of ordinary text.
@@ -51,13 +50,6 @@ var NameOptions = Options{}
 // the name is retried with this when the first read gives no usable name. Block
 // mode adds more stray marks, which the caller filters by confidence.
 var NameFallbackOptions = Options{PSM: 6}
-
-// NumberOptions reads the collector number band. The band holds the number
-// among other small text (illustrator, set symbol), so it is read as a block,
-// and only characters a number can contain are allowed. That makes digits far
-// more reliable, but Tesseract then reports a confidence of 0 for them, so the
-// caller must validate the result another way.
-var NumberOptions = Options{PSM: 6, Whitelist: "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ"}
 
 // Read runs OCR on a PNG image containing a single line of text. The process
 // is killed when ctx ends or the timeout passes; a timeout or deadline returns
@@ -76,9 +68,6 @@ func (e Engine) Read(ctx context.Context, png []byte, opts Options) (Result, err
 	}
 	// tsv: per-word output with confidences.
 	args := []string{"stdin", "stdout", "--psm", strconv.Itoa(psm)}
-	if opts.Whitelist != "" {
-		args = append(args, "-c", "tessedit_char_whitelist="+opts.Whitelist)
-	}
 	args = append(args, "tsv")
 	cmd := exec.CommandContext(ctx, e.Path, args...)
 	cmd.Stdin = bytes.NewReader(png)

@@ -56,7 +56,6 @@ func TestPrepare_cropsBands(t *testing.T) {
 		top, bottom int // source rows
 	}{
 		{"name", r.Name, 35, 95},
-		{"number", r.Number, 620, 679},
 	}
 	for _, tt := range tests {
 		img := decodeRegion(t, tt.png)
@@ -97,7 +96,7 @@ func TestPrepare_outputIsGrayPNG(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
-	for _, b := range [][]byte{r.Name, r.Number} {
+	for _, b := range [][]byte{r.Name} {
 		if _, ok := decodeRegion(t, b).(*image.Gray); !ok {
 			t.Errorf("region decodes as %T, want *image.Gray", decodeRegion(t, b))
 		}

@@ -26,15 +26,15 @@ const (
 // Bands are the vertical positions of the name and number bands, as fractions
 // of the image height (0 = top, 1 = bottom). Tune these with real photos.
 type Bands struct {
-	NameTop, NameBottom, NumberTop, NumberBottom float64
+	NameTop, NameBottom float64
 }
 
 // DefaultBands assumes the photo is cropped to the card's frame.
-var DefaultBands = Bands{NameTop: 0.05, NameBottom: 0.135, NumberTop: 0.885, NumberBottom: 0.97}
+var DefaultBands = Bands{NameTop: 0.05, NameBottom: 0.135}
 
 // Regions holds the two bands as PNG-encoded grayscale images.
 type Regions struct {
-	Name, Number []byte
+	Name []byte
 	// Image is the decoded photo, kept so a fallback can look at all of it.
 	Image image.Image
 }
@@ -74,11 +74,7 @@ func Prepare(r io.Reader, b Bands) (Regions, error) {
 	if err != nil {
 		return Regions{}, err
 	}
-	number, err := band(img, b.NumberTop, b.NumberBottom)
-	if err != nil {
-		return Regions{}, err
-	}
-	return Regions{Name: name, Number: number, Image: img}, nil
+	return Regions{Name: name, Image: img}, nil
 }
 
 // GrayPNG encodes the whole image as a grayscale PNG.
