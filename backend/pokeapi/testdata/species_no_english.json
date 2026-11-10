@@ -1,0 +1,9 @@
+{
+ "id": 25,
+ "name": "pikachu",
+ "flavor_text_entries": [
+  {"flavor_text": "Texte français", "language": {"name": "fr"}},
+  {"flavor_text": "日本語のテキスト", "language": {"name": "ja"}}
+ ],
+ "evolution_chain": {"url": "https://pokeapi.co/api/v2/evolution-chain/10/"}
+}
