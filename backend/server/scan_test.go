@@ -14,9 +14,7 @@ import (
 
 	"github.com/dhan0406/pokescan/backend/apierr"
 	"github.com/dhan0406/pokescan/backend/imageprep"
-	"github.com/dhan0406/pokescan/backend/pokeapi"
 	"github.com/dhan0406/pokescan/backend/scan"
-	"github.com/dhan0406/pokescan/backend/tcg"
 )
 
 // upload builds a multipart body with one file part.
@@ -43,66 +41,8 @@ func postScan(t *testing.T, sc *fakeScanner, field string, data []byte) map[stri
 	return decodeMap(t, rec)
 }
 
-var card = tcg.Card{ID: "base1-58", Name: "Pikachu", Number: "58", SetName: "Base", SetTotal: 102, ImageURL: "https://img/58.png", DexNumber: 25}
-
-func TestScan_match(t *testing.T) {
-	sp := pikachu
-	m := postScan(t, &fakeScanner{out: scan.Outcome{Status: scan.StatusMatch, Card: &card, Pokemon: &sp}}, "image", []byte("img"))
-	if got := strings.Join(keys(m), ","); got != "card,pokemon,status" {
-		t.Errorf("keys = %s, want card,pokemon,status", got)
-	}
-	c := m["card"].(map[string]any)
-	if got := strings.Join(keys(c), ","); got != "dexNumber,id,imageUrl,name,number,setName,setTotal" {
-		t.Errorf("card keys = %s", got)
-	}
-	if c["dexNumber"].(float64) != 25 || m["status"] != "match" {
-		t.Errorf("body = %v", m)
-	}
-}
-
-func TestScan_choose(t *testing.T) {
-	m := postScan(t, &fakeScanner{out: scan.Outcome{Status: scan.StatusChoose, Candidates: []tcg.Card{card, card}}}, "image", []byte("img"))
-	if got := strings.Join(keys(m), ","); got != "candidates,status" {
-		t.Errorf("keys = %s, want candidates,status", got)
-	}
-	if n := len(m["candidates"].([]any)); n != 2 {
-		t.Errorf("%d candidates, want 2", n)
-	}
-}
-
-func TestScan_retakeWithAndWithoutCandidates(t *testing.T) {
-	m := postScan(t, &fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonNameUnreadable, Candidates: []tcg.Card{card}}}, "image", []byte("img"))
-	if got := strings.Join(keys(m), ","); got != "candidates,reason,status" {
-		t.Errorf("with candidates: keys = %s", got)
-	}
-	m = postScan(t, &fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable}}, "image", []byte("img"))
-	if got := strings.Join(keys(m), ","); got != "reason,status" {
-		t.Errorf("without candidates: keys = %s", got)
-	}
-	if m["reason"] != "card_unreadable" {
-		t.Errorf("reason = %v", m["reason"])
-	}
-}
-
-func TestScan_trainerMatchOmitsPokemon(t *testing.T) {
-	trainer := tcg.Card{ID: "swsh35-62", Name: "Professor's Research"}
-	m := postScan(t, &fakeScanner{out: scan.Outcome{Status: scan.StatusMatch, Card: &trainer}}, "image", []byte("img"))
-	if _, ok := m["pokemon"]; ok {
-		t.Errorf("trainer match has pokemon: %v", m)
-	}
-}
-
-func TestScan_noNullArraysInPokemon(t *testing.T) {
-	sp := pokeapi.Species{ID: 132, Name: "ditto", Evolution: pokeapi.EvolutionNode{Name: "ditto"}}
-	body, ct := upload(t, "image", []byte("img"))
-	rec := do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusMatch, Card: &card, Pokemon: &sp}}, &fakeSpecies{}), "POST", "/v1/scan", body, ct)
-	if strings.Contains(rec.Body.String(), "null") {
-		t.Errorf("body contains null: %s", rec.Body.String())
-	}
-}
-
 func TestScan_passesImageBytes(t *testing.T) {
-	sc := &fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable}}
+	sc := &fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonNameUnreadable}}
 	data := []byte("\x89PNG pretend image bytes \x00\x01")
 	postScan(t, sc, "image", data)
 	if !bytes.Equal(sc.gotImg, data) {
@@ -154,7 +94,7 @@ func TestScan_tooLarge(t *testing.T) {
 }
 
 func TestScan_deadline(t *testing.T) {
-	sc := &fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable}}
+	sc := &fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonNameUnreadable}}
 	postScan(t, sc, "image", []byte("img"))
 	dl, ok := sc.gotCtx.Deadline()
 	if !ok {
@@ -199,41 +139,10 @@ func savedFiles(t *testing.T, dir string) []os.DirEntry {
 	return entries
 }
 
-func TestScan_savesUploadsNamedByStatus(t *testing.T) {
-	outcomes := map[string]scan.Outcome{
-		scan.StatusMatch:  {Status: scan.StatusMatch, Card: &card},
-		scan.StatusChoose: {Status: scan.StatusChoose, Candidates: []tcg.Card{card, card}},
-		scan.StatusRetake: {Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable},
-	}
-	for status, out := range outcomes {
-		t.Run(status, func(t *testing.T) {
-			dir := t.TempDir()
-			png := append([]byte("\x89PNG\r\n\x1a\n"), []byte("rest of the file")...)
-			body, ct := upload(t, "image", png)
-			rec := do(t, newTestServer(&fakeScanner{out: out}, &fakeSpecies{}, WithSaveUploads(dir)), "POST", "/v1/scan", body, ct)
-			if rec.Code != 200 {
-				t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
-			}
-			files := savedFiles(t, dir)
-			if len(files) != 1 {
-				t.Fatalf("%d files saved, want 1", len(files))
-			}
-			name := files[0].Name()
-			if !strings.Contains(name, "-"+status+".") || !strings.HasSuffix(name, ".png") {
-				t.Errorf("file name %q, want it to contain -%s. and end in .png", name, status)
-			}
-			got, _ := os.ReadFile(filepath.Join(dir, name))
-			if !bytes.Equal(got, png) {
-				t.Errorf("saved bytes differ from the upload")
-			}
-		})
-	}
-}
-
 func TestScan_savesJPEGWithJPGExtension(t *testing.T) {
 	dir := t.TempDir()
 	body, ct := upload(t, "image", []byte("\xff\xd8\xff\xe0 jpeg-ish bytes"))
-	do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable}}, &fakeSpecies{}, WithSaveUploads(dir)), "POST", "/v1/scan", body, ct)
+	do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonNameUnreadable}}, &fakeSpecies{}, WithSaveUploads(dir)), "POST", "/v1/scan", body, ct)
 	files := savedFiles(t, dir)
 	if len(files) != 1 || !strings.HasSuffix(files[0].Name(), ".jpg") {
 		t.Errorf("files = %v, want one .jpg", files)
@@ -244,7 +153,7 @@ func TestScan_savesNothingWhenOff(t *testing.T) {
 	dir := t.TempDir()
 	body, ct := upload(t, "image", []byte("img"))
 	for _, opt := range []Option{WithSaveUploads("")} {
-		do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable}}, &fakeSpecies{}, opt), "POST", "/v1/scan", body, ct)
+		do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonNameUnreadable}}, &fakeSpecies{}, opt), "POST", "/v1/scan", body, ct)
 	}
 	if n := len(savedFiles(t, dir)); n != 0 {
 		t.Errorf("%d files saved with saving off, want 0", n)
@@ -270,7 +179,7 @@ func TestScan_saveFailureDoesNotChangeTheResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, ct := upload(t, "image", []byte("img"))
-	rec := do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable}}, &fakeSpecies{}, WithSaveUploads(filepath.Join(blocker, "uploads"))), "POST", "/v1/scan", body, ct)
+	rec := do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonNameUnreadable}}, &fakeSpecies{}, WithSaveUploads(filepath.Join(blocker, "uploads"))), "POST", "/v1/scan", body, ct)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"status":"retake"`) {
 		t.Errorf("= %d %s, want the normal 200 retake response", rec.Code, rec.Body.String())
 	}

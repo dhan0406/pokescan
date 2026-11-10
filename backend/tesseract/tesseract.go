@@ -27,6 +27,8 @@ type Result struct {
 type Word struct {
 	Text       string
 	Confidence float64
+	// Box in the image that was read, in pixels.
+	Left, Top, Width, Height int
 }
 
 // Engine runs the tesseract binary at Path. A zero Timeout means 5s.
@@ -116,7 +118,12 @@ func parseTSV(tsv string) Result {
 		if err != nil || conf < 0 || text == "" {
 			continue
 		}
-		r.Words = append(r.Words, Word{Text: text, Confidence: conf})
+		w := Word{Text: text, Confidence: conf}
+		w.Left, _ = strconv.Atoi(cols[6])
+		w.Top, _ = strconv.Atoi(cols[7])
+		w.Width, _ = strconv.Atoi(cols[8])
+		w.Height, _ = strconv.Atoi(cols[9])
+		r.Words = append(r.Words, w)
 		texts = append(texts, text)
 		r.Confidence += conf
 	}

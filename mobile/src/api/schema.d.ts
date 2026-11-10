@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * Scan a card photo
-         * @description Upload a photo cropped to the card frame. Every recognition outcome (match, choose, retake) is a 200 response; only failures are errors.
+         * @description Upload a photo of the card. The name at the top is read and looked up on PokéAPI. Every recognition outcome (match, retake) is a 200 response; only failures are errors.
          */
         post: operations["scanCard"];
         delete?: never;
@@ -62,25 +62,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        Card: {
-            /** @example base1-58 */
-            id: string;
-            /** @example Pikachu */
-            name: string;
-            /** @example 58 */
-            number: string;
-            /** @example Base */
-            setName: string;
-            /** @example 102 */
-            setTotal: number;
-            /** Format: uri */
-            imageUrl: string;
-            /**
-             * @description National Pokédex number; 0 for Trainer and Energy cards.
-             * @example 25
-             */
-            dexNumber: number;
-        };
         Evolution: {
             /** @example pichu */
             name: string;
@@ -105,15 +86,13 @@ export interface components {
             flavorText: string;
             evolution: components["schemas"]["Evolution"];
         };
-        /** @description card and pokemon are present only for match (pokemon is omitted for Trainer and Energy cards). candidates is present for choose and optionally for retake. reason is present only for retake. */
+        /** @description pokemon is present only for match. reason is present only for retake: name_unreadable (the name at the top of the card could not be read) or not_found (it was read but is not a Pokémon name). */
         ScanResponse: {
             /** @enum {string} */
-            status: "match" | "choose" | "retake";
-            card?: components["schemas"]["Card"];
+            status: "match" | "retake";
             pokemon?: components["schemas"]["Pokemon"];
-            candidates?: components["schemas"]["Card"][];
             /** @enum {string} */
-            reason?: "name_unreadable" | "number_unreadable" | "card_unreadable" | "not_found";
+            reason?: "name_unreadable" | "not_found";
         };
         ErrorBody: {
             /** @enum {string} */

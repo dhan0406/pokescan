@@ -35,6 +35,8 @@ var DefaultBands = Bands{NameTop: 0.05, NameBottom: 0.135, NumberTop: 0.885, Num
 // Regions holds the two bands as PNG-encoded grayscale images.
 type Regions struct {
 	Name, Number []byte
+	// Image is the decoded photo, kept so a fallback can look at all of it.
+	Image image.Image
 }
 
 // ErrBadImage means the upload is not a usable JPEG or PNG.
@@ -76,7 +78,32 @@ func Prepare(r io.Reader, b Bands) (Regions, error) {
 	if err != nil {
 		return Regions{}, err
 	}
-	return Regions{Name: name, Number: number}, nil
+	return Regions{Name: name, Number: number, Image: img}, nil
+}
+
+// GrayPNG encodes the whole image as a grayscale PNG.
+func GrayPNG(img image.Image) ([]byte, error) {
+	return cropPNG(img, img.Bounds())
+}
+
+// CropPNG encodes the part of img inside r (clamped to the image) as a
+// grayscale PNG. It is ErrBadImage if nothing is left.
+func CropPNG(img image.Image, r image.Rectangle) ([]byte, error) {
+	r = r.Intersect(img.Bounds())
+	if r.Dx() < 1 || r.Dy() < 1 {
+		return nil, fmt.Errorf("%w: empty crop", ErrBadImage)
+	}
+	return cropPNG(img, r)
+}
+
+func cropPNG(img image.Image, r image.Rectangle) ([]byte, error) {
+	gray := image.NewGray(image.Rect(0, 0, r.Dx(), r.Dy()))
+	draw.Draw(gray, gray.Bounds(), img, r.Min, draw.Src)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, gray); err != nil {
+		return nil, fmt.Errorf("encode: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // band crops the full-width rows between the top and bottom fractions of the

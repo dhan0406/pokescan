@@ -4,7 +4,6 @@ import type { components } from './schema';
 
 export type ScanResponse = components['schemas']['ScanResponse'];
 export type Pokemon = components['schemas']['Pokemon'];
-export type Card = components['schemas']['Card'];
 type ErrorBody = components['schemas']['ErrorBody'];
 
 /** Codes the server sends, plus three the client produces itself. */

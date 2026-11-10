@@ -16,7 +16,7 @@ func TestLoadConfig_defaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
-	want := Config{Port: "8080", CacheTTL: 24 * time.Hour, TCGAPIKey: "", TesseractPath: "tesseract", SaveUploadsDir: ""}
+	want := Config{Port: "8080", CacheTTL: 24 * time.Hour, TesseractPath: "tesseract", SaveUploadsDir: ""}
 	if got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
@@ -24,12 +24,12 @@ func TestLoadConfig_defaults(t *testing.T) {
 
 func TestLoadConfig_overrides(t *testing.T) {
 	got, err := loadConfig(env(map[string]string{
-		"PORT": "9000", "CACHE_TTL": "90m", "TCG_API_KEY": "k", "TESSERACT_PATH": "/opt/tesseract", "SAVE_UPLOADS_DIR": "/tmp/cards",
+		"PORT": "9000", "CACHE_TTL": "90m", "TESSERACT_PATH": "/opt/tesseract", "SAVE_UPLOADS_DIR": "/tmp/cards",
 	}))
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
-	want := Config{Port: "9000", CacheTTL: 90 * time.Minute, TCGAPIKey: "k", TesseractPath: "/opt/tesseract", SaveUploadsDir: "/tmp/cards"}
+	want := Config{Port: "9000", CacheTTL: 90 * time.Minute, TesseractPath: "/opt/tesseract", SaveUploadsDir: "/tmp/cards"}
 	if got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}

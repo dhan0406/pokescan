@@ -37,11 +37,22 @@ func cleanNameToken(tok string) string {
 	if tok == "" || !strings.ContainsFunc(tok, unicode.IsLetter) {
 		return ""
 	}
-	if noiseWord.MatchString(tok) {
+	if noiseWord.MatchString(tok) || strayMark.MatchString(tok) {
 		return ""
+	}
+	if len([]rune(tok)) <= 2 && !shortNameWords[tok] {
+		return "" // a fragment of the HP or energy symbol, not part of a name
 	}
 	return tok
 }
+
+// Short words that really do appear in card names.
+var shortNameWords = map[string]bool{
+	"ex": true, "EX": true, "V": true, "GX": true, "Z": true, "Mr": true, "Mr.": true, "Jr": true, "Jr.": true, "♀": true, "♂": true,
+}
+
+// A lowercase letter followed by digits ("w70") is the HP value, not a name.
+var strayMark = regexp.MustCompile(`^[a-z]\d+$`)
 
 var noiseWord = regexp.MustCompile(`(?i)^(basic|stage|hp\d*)$`)
 

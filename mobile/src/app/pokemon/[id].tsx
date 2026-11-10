@@ -20,12 +20,16 @@ const STAT_LABELS: [string, string][] = [
   ['special-attack', 'SP.A'], ['special-defense', 'SP.D'], ['speed', 'SPD'],
 ];
 
+// Official artwork from the PokéAPI sprites repository, by National Pokédex number.
+const artworkUrl = (id: number) =>
+  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+
 function flatten(e: Evolution): string[] {
   return [e.name, ...e.evolvesTo.flatMap(flatten)];
 }
 
 export default function PokemonScreen() {
-  const { id, image } = useLocalSearchParams<{ id: string; image?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [state, setState] = useState<{ pokemon?: Pokemon; error?: string }>({});
 
   useEffect(() => {
@@ -74,7 +78,7 @@ export default function PokemonScreen() {
         </View>
       </View>
 
-      {image ? <Image source={{ uri: image }} style={styles.card} resizeMode="contain" /> : null}
+      <Image source={{ uri: artworkUrl(p.id) }} style={styles.artwork} resizeMode="contain" />
 
       {p.flavorText ? <Text style={styles.flavor}>{p.flavorText}</Text> : null}
 
@@ -124,7 +128,7 @@ const styles = StyleSheet.create({
   name: { ...type.mono, fontSize: 26, lineHeight: 32, fontWeight: '700', color: colors.text },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { ...type.mono, color: '#111', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: 6, overflow: 'hidden' },
-  card: { width: '100%', height: 320 },
+  artwork: { width: '100%', height: 260 },
   flavor: { ...type.body, color: colors.text },
   heading: { ...type.heading, color: colors.text, marginTop: spacing.sm },
   statRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

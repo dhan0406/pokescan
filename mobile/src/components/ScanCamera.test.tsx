@@ -27,7 +27,7 @@ jest.mock('expo-router', () => ({ useIsFocused: () => mockFocused }));
 jest.mock('@/capture/prepare', () => ({ prepareUpload: (...args: unknown[]) => mockPrepareUpload(...args) }));
 jest.mock('@/capture/files', () => ({ deleteQuietly: (uri: string) => mockDeleted.push(uri) }));
 
-const retake: ScanResponse = { status: 'retake', reason: 'card_unreadable' };
+const retake: ScanResponse = { status: 'retake', reason: 'name_unreadable' };
 
 function fakeApi(scan: ApiClient['scan']): ApiClient {
   return { ping: jest.fn(), getPokemon: jest.fn(), scan };
@@ -67,12 +67,12 @@ describe('ScanCamera shutter', () => {
     expect(shutter()).toBeEnabled();
   });
 
-  it('is disabled again when a freshly mounted camera has not reported ready (after "Scan another card")', async () => {
+  it('is disabled again when a freshly mounted camera has not reported ready (after "Scan again")', async () => {
     await renderReadyCamera(fakeApi(jest.fn().mockResolvedValue(retake)));
     await fireEvent.press(shutter());
-    await waitFor(() => expect(screen.getByText('Scan another card')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Scan again')).toBeTruthy());
 
-    await fireEvent.press(screen.getByText('Scan another card'));
+    await fireEvent.press(screen.getByText('Scan again'));
     await layoutCamera();
 
     // The old camera was unmounted. The new one has not started yet, so a tap
@@ -97,10 +97,10 @@ describe('ScanCamera cleanup of cached photos', () => {
   it('deletes the prepared photo when the user scans another card', async () => {
     await renderReadyCamera(fakeApi(jest.fn().mockResolvedValue(retake)));
     await fireEvent.press(shutter());
-    await waitFor(() => expect(screen.getByText('Scan another card')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Scan again')).toBeTruthy());
     expect(mockDeleted).toEqual([]); // still showing it as the thumbnail
 
-    await fireEvent.press(screen.getByText('Scan another card'));
+    await fireEvent.press(screen.getByText('Scan again'));
     expect(mockDeleted).toEqual(['file:///cache/ImageManipulator/crop.jpg']);
   });
 
@@ -114,7 +114,7 @@ describe('ScanCamera cleanup of cached photos', () => {
   it('deletes the thumbnail when the screen goes away while showing a result', async () => {
     const { unmount } = await renderReadyCamera(fakeApi(jest.fn().mockResolvedValue(retake)));
     await fireEvent.press(shutter());
-    await waitFor(() => expect(screen.getByText('Scan another card')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Scan again')).toBeTruthy());
 
     await unmount();
     expect(mockDeleted).toEqual(['file:///cache/ImageManipulator/crop.jpg']);
@@ -166,8 +166,8 @@ describe('ScanCamera zoom', () => {
     const chosen = mockCameraProps.zoom;
 
     await fireEvent.press(screen.getByLabelText('Take photo'));
-    await waitFor(() => expect(screen.getByText('Scan another card')).toBeTruthy());
-    await fireEvent.press(screen.getByText('Scan another card'));
+    await waitFor(() => expect(screen.getByText('Scan again')).toBeTruthy());
+    await fireEvent.press(screen.getByText('Scan again'));
     expect(mockCameraProps.zoom).toBe(chosen);
   });
 });

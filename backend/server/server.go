@@ -17,7 +17,6 @@ import (
 	"github.com/dhan0406/pokescan/backend/imageprep"
 	"github.com/dhan0406/pokescan/backend/pokeapi"
 	"github.com/dhan0406/pokescan/backend/scan"
-	"github.com/dhan0406/pokescan/backend/tcg"
 )
 
 // Scanner runs a scan on an uploaded image.
@@ -181,30 +180,11 @@ func safeLabel(s string) string {
 
 func toScanResponse(o scan.Outcome) ScanResponse {
 	resp := ScanResponse{Status: o.Status, Reason: o.Reason}
-	if o.Card != nil {
-		c := toCard(*o.Card)
-		resp.Card = &c
-	}
 	if o.Pokemon != nil {
 		p := toPokemon(*o.Pokemon)
 		resp.Pokemon = &p
 	}
-	for _, c := range o.Candidates {
-		resp.Candidates = append(resp.Candidates, toCard(c))
-	}
 	return resp
-}
-
-func toCard(c tcg.Card) Card {
-	return Card{
-		ID:        c.ID,
-		Name:      c.Name,
-		Number:    c.Number,
-		SetName:   c.SetName,
-		SetTotal:  c.SetTotal,
-		ImageURL:  c.ImageURL,
-		DexNumber: c.DexNumber,
-	}
 }
 
 // toPokemon maps a species to its API shape, using empty arrays and maps

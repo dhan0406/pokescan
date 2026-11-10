@@ -2,7 +2,7 @@ import { ApiError, type ScanResponse } from '@/api/client';
 
 import { scanReducer, type ScanState } from './reducer';
 
-const response: ScanResponse = { status: 'retake', reason: 'card_unreadable' };
+const response: ScanResponse = { status: 'retake', reason: 'name_unreadable' };
 const error = new ApiError('network_error', "Couldn't reach the server.");
 
 const idle: ScanState = { phase: 'idle' };

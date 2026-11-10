@@ -1,7 +1,7 @@
 import { useCameraPermissions } from 'expo-camera';
 import { router, useIsFocused } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ApiClient } from '@/api/client';
 import { useScan } from '@/scan/useScan';
@@ -22,7 +22,7 @@ export function ScanCamera({ api }: { api: ApiClient }) {
     if (state.phase === 'done' && state.response.status === 'match' && state.response.pokemon) {
       router.push({
         pathname: '/pokemon/[id]',
-        params: { id: String(state.response.pokemon.id), image: state.response.card?.imageUrl ?? '' },
+        params: { id: String(state.response.pokemon.id) },
       });
       reset();
     }
@@ -40,14 +40,19 @@ export function ScanCamera({ api }: { api: ApiClient }) {
   }
 
   if (state.phase === 'done') {
+    // A match opens the viewer (effect above); this is a retake.
+    const tip =
+      state.response.reason === 'not_found'
+        ? "We read the name but it isn't a Pokémon we know. Try again with the whole top of the card in view."
+        : "Couldn't read the Pokémon's name. Hold the phone steady, avoid glare, and keep the name at the top of the card in the frame.";
     return (
-      <ScrollView style={styles.fill} contentContainerStyle={styles.result}>
-        <Image source={{ uri: state.thumbnailUri }} style={styles.thumbnail} resizeMode="contain" />
-        <Text style={styles.mono}>{JSON.stringify(state.response, null, 2)}</Text>
+      <View style={[styles.fill, styles.result]}>
+        <Text style={styles.heading}>Let&apos;s try again</Text>
+        <Text style={styles.body}>{tip}</Text>
         <Pressable accessibilityRole="button" onPress={reset} style={styles.button}>
-          <Text style={styles.buttonText}>Scan another card</Text>
+          <Text style={styles.buttonText}>Scan again</Text>
         </Pressable>
-      </ScrollView>
+      </View>
     );
   }
 
@@ -73,8 +78,7 @@ export function ScanCamera({ api }: { api: ApiClient }) {
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.background },
   result: { padding: spacing.lg, gap: spacing.md, justifyContent: 'center' },
-  thumbnail: { width: '100%', height: 280 },
-  mono: { ...type.mono, color: colors.text },
+  body: { ...type.body, color: colors.textMuted },
   heading: { ...type.heading, color: colors.text },
   error: { ...type.body, color: colors.danger },
   button: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },

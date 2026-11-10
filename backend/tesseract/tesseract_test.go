@@ -98,7 +98,7 @@ func TestRead_parsesWordsAndConfidence(t *testing.T) {
 	if got.Text != "Pikachu V" || got.Confidence != 80 {
 		t.Errorf("Read = %+v, want {Pikachu V 80}", got)
 	}
-	want := []Word{{"Pikachu", 90}, {"V", 70}}
+	want := []Word{{"Pikachu", 90, 10, 5, 120, 40}, {"V", 70, 140, 5, 20, 40}}
 	if !reflect.DeepEqual(got.Words, want) {
 		t.Errorf("Words = %+v, want %+v", got.Words, want)
 	}
