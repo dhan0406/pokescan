@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -59,11 +60,18 @@ type apiResponse struct {
 	} `json:"data"`
 }
 
-// FindCards looks up cards by name and collector number. Empty name or number
-// returns an empty slice without calling the API. No match is an empty slice,
+// validNumber is what a collector number may look like. Anything else (for
+// example "025/185" or text containing quotes or spaces) could change the
+// meaning of the TCG search query, so it is treated as "no such card".
+var validNumber = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
+
+// FindCards looks up cards by name and collector number. Surrounding spaces are
+// trimmed. An empty name, or an empty or malformed number, returns an empty
+// slice without calling the API. No match is an empty slice,
 // not an error.
 func (c *Client) FindCards(ctx context.Context, name, number string) ([]Card, error) {
-	if name == "" || number == "" {
+	name, number = strings.TrimSpace(name), strings.TrimSpace(number)
+	if name == "" || !validNumber.MatchString(number) {
 		return []Card{}, nil
 	}
 

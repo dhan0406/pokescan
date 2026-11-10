@@ -206,3 +206,41 @@ func TestNormalizeNumber(t *testing.T) {
 		}
 	}
 }
+
+func TestFindCards_invalidNumberSkipsRequest(t *testing.T) {
+	for _, number := range []string{"025/185", `25 OR name:charizard`, `25"`, "2*", "25)", "  ", "TG 05"} {
+		t.Run(number, func(t *testing.T) {
+			f := newFake(t, 200, fixture(t))
+			cards, err := NewClient(f.URL, "", f.Client()).FindCards(context.Background(), "Pikachu", number)
+			if err != nil {
+				t.Fatalf("FindCards: %v", err)
+			}
+			if cards == nil || len(cards) != 0 {
+				t.Errorf("cards = %#v, want empty non-nil slice", cards)
+			}
+			if len(f.queries) != 0 {
+				t.Errorf("made %d requests (q=%q), want 0", len(f.queries), f.queries)
+			}
+		})
+	}
+}
+
+func TestFindCards_trimsInputs(t *testing.T) {
+	f := newFake(t, 200, []byte(`{"data":[]}`))
+	c := NewClient(f.URL, "", f.Client())
+	if _, err := c.FindCards(context.Background(), " Pikachu ", " 025 "); err != nil {
+		t.Fatalf("FindCards: %v", err)
+	}
+	want := `name:"Pikachu" number:25`
+	if len(f.queries) != 1 || f.queries[0] != want {
+		t.Errorf("q = %q, want [%s]", f.queries, want)
+	}
+}
+
+func TestFindCards_blankNameSkipsRequest(t *testing.T) {
+	f := newFake(t, 200, fixture(t))
+	cards, err := NewClient(f.URL, "", f.Client()).FindCards(context.Background(), "   ", "25")
+	if err != nil || cards == nil || len(cards) != 0 || len(f.queries) != 0 {
+		t.Errorf("got %#v, %v, %d requests; want empty slice, nil, 0", cards, err, len(f.queries))
+	}
+}

@@ -105,7 +105,7 @@ func TestCachedCards_keyNormalization(t *testing.T) {
 	}{
 		{"case and leading zeros", [2]string{"Pikachu", "025"}, [2]string{"pikachu", "25"}, true},
 		{"surrounding space", [2]string{" Pikachu ", "25"}, [2]string{"Pikachu", "25"}, true},
-		{"letter prefix case", [2]string{"Zekrom", "TG05"}, [2]string{"Zekrom", "tg05"}, true},
+		{"letter prefix case is sent as typed, so is not shared", [2]string{"Zekrom", "TG05"}, [2]string{"Zekrom", "tg05"}, false},
 		{"prefixed number is not the bare number", [2]string{"Pikachu", "TG05"}, [2]string{"Pikachu", "5"}, false},
 		{"different names", [2]string{"Pikachu", "25"}, [2]string{"Raichu", "25"}, false},
 	}

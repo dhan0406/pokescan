@@ -33,7 +33,7 @@ func NewCards(next CardFinder, ttl time.Duration, now func() time.Time) *CachedC
 
 // FindCards implements CardFinder.
 func (c *CachedCards) FindCards(ctx context.Context, name, number string) ([]tcg.Card, error) {
-	key := strings.ToLower(strings.TrimSpace(name)) + "|" + strings.ToUpper(tcg.NormalizeNumber(strings.TrimSpace(number)))
+	key := strings.ToLower(strings.TrimSpace(name)) + "|" + tcg.NormalizeNumber(strings.TrimSpace(number))
 	if v, ok := c.cache.Get(key); ok {
 		return v, nil
 	}

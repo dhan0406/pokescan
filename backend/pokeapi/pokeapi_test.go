@@ -111,3 +111,25 @@ func TestTypePokemon_unknownTypeIsNotFound(t *testing.T) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }
+
+// Names that are not valid PokéAPI slugs must be rejected without a request,
+// so they can never reach a list endpoint or another resource.
+var badNames = []string{"", "  ", "../type/fire", "a/b", "pika chu", "pikachu?x=1", "pikachu#frag", "%2e%2e"}
+
+func TestTypePokemon_invalidNameSkipsRequest(t *testing.T) {
+	for _, name := range badNames {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t, map[string]string{"/api/v2/type/": "type_electric"}, nil)
+			got, err := NewClient(f.URL, f.Client()).TypePokemon(context.Background(), name)
+			if !errors.Is(err, apierr.ErrNotFound) {
+				t.Errorf("err = %v, want ErrNotFound", err)
+			}
+			if got != nil {
+				t.Errorf("got %v, want nil", got)
+			}
+			if len(f.paths) != 0 {
+				t.Errorf("made requests %q, want none", f.paths)
+			}
+		})
+	}
+}

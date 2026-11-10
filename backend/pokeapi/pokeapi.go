@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -36,10 +36,19 @@ func New() *Client {
 	return NewClient(defaultBaseURL, &http.Client{Timeout: defaultTimeout})
 }
 
-// endpoint builds /api/v2/<resource>/<name> with the name lowercased and
-// path-escaped, so a caller-supplied name can never reach another endpoint.
-func (c *Client) endpoint(resource, name string) string {
-	return c.baseURL + "/api/v2/" + resource + "/" + url.PathEscape(strings.ToLower(name))
+// slug is what a PokéAPI resource name or ID looks like.
+var slug = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+// endpoint builds /api/v2/<resource>/<name> from a name or ID that is trimmed
+// and lowercased. A name that is not a valid slug (empty, or containing "/",
+// "?", spaces and so on) returns ErrNotFound without any request, so a
+// caller-supplied name can never reach a list endpoint or another resource.
+func (c *Client) endpoint(resource, name string) (string, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !slug.MatchString(name) {
+		return "", fmt.Errorf("%w: invalid %s name %q", apierr.ErrNotFound, resource, name)
+	}
+	return c.baseURL + "/api/v2/" + resource + "/" + name, nil
 }
 
 // TypePokemon returns the names of the Pokémon of a type.
@@ -51,7 +60,11 @@ func (c *Client) TypePokemon(ctx context.Context, typeName string) ([]string, er
 			} `json:"pokemon"`
 		} `json:"pokemon"`
 	}
-	if err := httpjson.Get(ctx, c.hc, c.endpoint("type", typeName), nil, &resp); err != nil {
+	u, err := c.endpoint("type", typeName)
+	if err != nil {
+		return nil, err
+	}
+	if err := httpjson.Get(ctx, c.hc, u, nil, &resp); err != nil {
 		return nil, err
 	}
 	names := make([]string, 0, len(resp.Pokemon))
@@ -93,7 +106,11 @@ func (c *Client) Species(ctx context.Context, idOrName string) (Species, error) 
 			URL string `json:"url"`
 		} `json:"evolution_chain"`
 	}
-	if err := httpjson.Get(ctx, c.hc, c.endpoint("pokemon-species", idOrName), nil, &sp); err != nil {
+	spURL, err := c.endpoint("pokemon-species", idOrName)
+	if err != nil {
+		return Species{}, err
+	}
+	if err := httpjson.Get(ctx, c.hc, spURL, nil, &sp); err != nil {
 		return Species{}, err
 	}
 
@@ -101,10 +118,14 @@ func (c *Client) Species(ctx context.Context, idOrName string) (Species, error) 
 	if err != nil {
 		return Species{}, err
 	}
+	chainURL, err := c.endpoint("evolution-chain", chainID)
+	if err != nil {
+		return Species{}, err
+	}
 	var chain struct {
 		Chain chainLink `json:"chain"`
 	}
-	if err := httpjson.Get(ctx, c.hc, c.endpoint("evolution-chain", chainID), nil, &chain); err != nil {
+	if err := httpjson.Get(ctx, c.hc, chainURL, nil, &chain); err != nil {
 		return Species{}, err
 	}
 
@@ -121,7 +142,11 @@ func (c *Client) Species(ctx context.Context, idOrName string) (Species, error) 
 			} `json:"stat"`
 		} `json:"stats"`
 	}
-	if err := httpjson.Get(ctx, c.hc, c.endpoint("pokemon", strconv.Itoa(sp.ID)), nil, &pk); err != nil {
+	pkURL, err := c.endpoint("pokemon", strconv.Itoa(sp.ID))
+	if err != nil {
+		return Species{}, err
+	}
+	if err := httpjson.Get(ctx, c.hc, pkURL, nil, &pk); err != nil {
 		return Species{}, err
 	}
 

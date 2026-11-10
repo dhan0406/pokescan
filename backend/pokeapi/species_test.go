@@ -198,3 +198,28 @@ func TestSpecies_badChainURLIsUpstream(t *testing.T) {
 		t.Errorf("err = %v, want ErrUpstream", err)
 	}
 }
+
+func TestSpecies_invalidNameSkipsRequest(t *testing.T) {
+	for _, name := range badNames {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t, pikachuRoutes(), nil)
+			_, err := NewClient(f.URL, f.Client()).Species(context.Background(), name)
+			if !errors.Is(err, apierr.ErrNotFound) {
+				t.Errorf("err = %v, want ErrNotFound", err)
+			}
+			if len(f.paths) != 0 {
+				t.Errorf("made requests %q, want none", f.paths)
+			}
+		})
+	}
+}
+
+func TestSpecies_trimsName(t *testing.T) {
+	f := newFake(t, pikachuRoutes(), nil)
+	if _, err := NewClient(f.URL, f.Client()).Species(context.Background(), "  Pikachu "); err != nil {
+		t.Fatalf("Species: %v", err)
+	}
+	if len(f.paths) == 0 || f.paths[0] != "/api/v2/pokemon-species/pikachu" {
+		t.Errorf("paths = %q, want first to be the trimmed lowercase species path", f.paths)
+	}
+}
