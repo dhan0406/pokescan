@@ -138,6 +138,7 @@ Body `{ "code": "...", "message": "..." }`. Messages are plain language and neve
 | `CACHE_TTL` | `24h` |
 | `TCG_API_KEY` | empty (optional) |
 | `TESSERACT_PATH` | `tesseract` (looked up on `PATH`) |
+| `SAVE_UPLOADS_DIR` | empty (off). When set, every successfully scanned photo is saved there as `<UTC time>-<status>.jpg\|png` (directory `0700`, files `0600`) so real photos can be used to tune the OCR bands and confidence threshold. Photos of cards only, but they are the user's data: point it outside the repository. A save failure is logged and never changes the response. |
 
 Startup fails fast with a clear message if `CACHE_TTL` does not parse. A missing Tesseract binary is reported at startup as a warning, and scans then return `ocr_failed`.
 
