@@ -1,4 +1,4 @@
-// Package ocr turns messy OCR text from a Pokémon card into a card name and
+// Package ocr turns messy OCR text from the top of a Pokémon card into a card name.
 package ocr
 
 import (

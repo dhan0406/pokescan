@@ -1,5 +1,5 @@
 // Package imageprep turns an uploaded card photo into the small grayscale
-// images Tesseract reads: one band for the card name, one for the number.
+// image Tesseract reads: a band across the top of the card, where the name is.
 package imageprep
 
 import (
@@ -23,7 +23,7 @@ const (
 	minSide = 100
 )
 
-// Bands are the vertical positions of the name and number bands, as fractions
+// Bands is the vertical position of the name band, as a fraction
 // of the image height (0 = top, 1 = bottom). Tune these with real photos.
 type Bands struct {
 	NameTop, NameBottom float64
@@ -42,7 +42,7 @@ type Regions struct {
 // ErrBadImage means the upload is not a usable JPEG or PNG.
 var ErrBadImage = errors.New("bad image")
 
-// Prepare decodes a JPEG or PNG and returns its name and number bands as
+// Prepare decodes a JPEG or PNG and returns its name band as
 // grayscale PNGs. The format is detected from the content, not a file name.
 // Anything else, or an image that is too large or too small, is ErrBadImage.
 func Prepare(r io.Reader, b Bands) (Regions, error) {
