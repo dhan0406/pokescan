@@ -114,5 +114,5 @@ These are deliberate and should be called out, not fixed now:
 
 ## Open items
 
-- Check how the TCG API stores trainer-gallery and promo numbers (`TG05`, `SWSH123`) before fixing the no-change rule above.
+- Resolved 2026-11-09: the live TCG API stores trainer-gallery and promo numbers with their prefix and zero padding (`TG05`, `SWSH039`), so passing letter-prefixed numbers through unchanged is correct.
 - Decide whether `Species` should return partial data if the chain call fails, or fail the whole request. Default for now: fail the whole request.
