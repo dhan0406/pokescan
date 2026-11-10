@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -185,5 +187,104 @@ func TestScan_scannerErrorsMapped(t *testing.T) {
 				t.Errorf("= %d %s, want %d %s", rec.Code, rec.Body.String(), tt.status, tt.code)
 			}
 		})
+	}
+}
+
+func savedFiles(t *testing.T, dir string) []os.DirEntry {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return entries
+}
+
+func TestScan_savesUploadsNamedByStatus(t *testing.T) {
+	outcomes := map[string]scan.Outcome{
+		scan.StatusMatch:  {Status: scan.StatusMatch, Card: &card},
+		scan.StatusChoose: {Status: scan.StatusChoose, Candidates: []tcg.Card{card, card}},
+		scan.StatusRetake: {Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable},
+	}
+	for status, out := range outcomes {
+		t.Run(status, func(t *testing.T) {
+			dir := t.TempDir()
+			png := append([]byte("\x89PNG\r\n\x1a\n"), []byte("rest of the file")...)
+			body, ct := upload(t, "image", png)
+			rec := do(t, newTestServer(&fakeScanner{out: out}, &fakeSpecies{}, WithSaveUploads(dir)), "POST", "/v1/scan", body, ct)
+			if rec.Code != 200 {
+				t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+			}
+			files := savedFiles(t, dir)
+			if len(files) != 1 {
+				t.Fatalf("%d files saved, want 1", len(files))
+			}
+			name := files[0].Name()
+			if !strings.Contains(name, "-"+status+".") || !strings.HasSuffix(name, ".png") {
+				t.Errorf("file name %q, want it to contain -%s. and end in .png", name, status)
+			}
+			got, _ := os.ReadFile(filepath.Join(dir, name))
+			if !bytes.Equal(got, png) {
+				t.Errorf("saved bytes differ from the upload")
+			}
+		})
+	}
+}
+
+func TestScan_savesJPEGWithJPGExtension(t *testing.T) {
+	dir := t.TempDir()
+	body, ct := upload(t, "image", []byte("\xff\xd8\xff\xe0 jpeg-ish bytes"))
+	do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable}}, &fakeSpecies{}, WithSaveUploads(dir)), "POST", "/v1/scan", body, ct)
+	files := savedFiles(t, dir)
+	if len(files) != 1 || !strings.HasSuffix(files[0].Name(), ".jpg") {
+		t.Errorf("files = %v, want one .jpg", files)
+	}
+}
+
+func TestScan_savesNothingWhenOff(t *testing.T) {
+	dir := t.TempDir()
+	body, ct := upload(t, "image", []byte("img"))
+	for _, opt := range []Option{WithSaveUploads("")} {
+		do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable}}, &fakeSpecies{}, opt), "POST", "/v1/scan", body, ct)
+	}
+	if n := len(savedFiles(t, dir)); n != 0 {
+		t.Errorf("%d files saved with saving off, want 0", n)
+	}
+}
+
+func TestScan_doesNotSaveFailedScans(t *testing.T) {
+	dir := t.TempDir()
+	body, ct := upload(t, "image", []byte("img"))
+	rec := do(t, newTestServer(&fakeScanner{err: fmt.Errorf("%w: gif", imageprep.ErrBadImage)}, &fakeSpecies{}, WithSaveUploads(dir)), "POST", "/v1/scan", body, ct)
+	if rec.Code != 400 {
+		t.Fatalf("status %d, want 400", rec.Code)
+	}
+	if n := len(savedFiles(t, dir)); n != 0 {
+		t.Errorf("%d files saved for a failed scan, want 0", n)
+	}
+}
+
+func TestScan_saveFailureDoesNotChangeTheResponse(t *testing.T) {
+	// A directory underneath a regular file can never be created.
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body, ct := upload(t, "image", []byte("img"))
+	rec := do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: scan.StatusRetake, Reason: scan.ReasonCardUnreadable}}, &fakeSpecies{}, WithSaveUploads(filepath.Join(blocker, "uploads"))), "POST", "/v1/scan", body, ct)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"status":"retake"`) {
+		t.Errorf("= %d %s, want the normal 200 retake response", rec.Code, rec.Body.String())
+	}
+}
+
+func TestScan_savedFileNameCannotEscapeTheDirectory(t *testing.T) {
+	dir := t.TempDir()
+	body, ct := upload(t, "image", []byte("img"))
+	do(t, newTestServer(&fakeScanner{out: scan.Outcome{Status: "../../evil/name"}}, &fakeSpecies{}, WithSaveUploads(dir)), "POST", "/v1/scan", body, ct)
+	files := savedFiles(t, dir)
+	if len(files) != 1 {
+		t.Fatalf("%d files in the upload dir, want 1", len(files))
+	}
+	if strings.ContainsAny(files[0].Name(), `/\`) {
+		t.Errorf("file name %q contains a path separator", files[0].Name())
 	}
 }

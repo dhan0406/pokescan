@@ -2,12 +2,16 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dhan0406/pokescan/backend/imageprep"
@@ -25,11 +29,25 @@ type server struct {
 	scanner Scanner
 	species scan.SpeciesGetter
 	log     *slog.Logger
+	saveDir string // when set, scanned photos are saved here
+}
+
+// Option configures optional server behavior.
+type Option func(*server)
+
+// WithSaveUploads saves every successfully scanned photo into dir, named by
+// time and outcome, so real photos can be used to tune OCR. An empty dir turns
+// it off. Save failures are logged and never change the response.
+func WithSaveUploads(dir string) Option {
+	return func(s *server) { s.saveDir = dir }
 }
 
 // New returns the API handler.
-func New(sc Scanner, species scan.SpeciesGetter, log *slog.Logger) http.Handler {
+func New(sc Scanner, species scan.SpeciesGetter, log *slog.Logger, opts ...Option) http.Handler {
 	s := &server{scanner: sc, species: species, log: log}
+	for _, opt := range opts {
+		opt(s)
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /ping", s.ping)
@@ -93,14 +111,72 @@ func (s *server) scan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The scanner reads the upload as a stream. When saving is on, hold the
+	// bytes (at most 10 MB) so the same photo can be written out afterwards.
+	var img io.Reader = file
+	var saved []byte
+	if s.saveDir != "" {
+		saved, err = io.ReadAll(file)
+		if err != nil {
+			writeError(w, s.log, fmt.Errorf("%w: %v", imageprep.ErrBadImage, err))
+			return
+		}
+		img = bytes.NewReader(saved)
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 	defer cancel()
-	out, err := s.scanner.Scan(ctx, file)
+	out, err := s.scanner.Scan(ctx, img)
 	if err != nil {
 		writeError(w, s.log, err)
 		return
 	}
+	if saved != nil {
+		s.saveUpload(saved, out.Status)
+	}
 	writeJSON(w, http.StatusOK, toScanResponse(out))
+}
+
+// saveUpload writes a scanned photo to the save directory as
+// <UTC time>-<status>.<ext>. Problems are logged; they never affect the response.
+func (s *server) saveUpload(data []byte, status string) {
+	if err := os.MkdirAll(s.saveDir, 0o700); err != nil {
+		s.log.Warn("could not create upload directory", "dir", s.saveDir, "err", err)
+		return
+	}
+	ext := ".bin"
+	switch http.DetectContentType(data) {
+	case "image/jpeg":
+		ext = ".jpg"
+	case "image/png":
+		ext = ".png"
+	}
+	name := time.Now().UTC().Format("20060102T150405.000000000Z") + "-" + safeLabel(status) + ext
+
+	f, err := os.OpenFile(filepath.Join(s.saveDir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		s.log.Warn("could not save upload", "err", err)
+		return
+	}
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
+		s.log.Warn("could not save upload", "err", err)
+	}
+}
+
+// safeLabel keeps lowercase letters, digits and underscores so a status can
+// never add a path separator to a file name.
+func safeLabel(s string) string {
+	label := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			return r
+		}
+		return '_'
+	}, s)
+	if label == "" {
+		return "unknown"
+	}
+	return label
 }
 
 func toScanResponse(o scan.Outcome) ScanResponse {

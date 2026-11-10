@@ -42,7 +42,12 @@ func run(log *slog.Logger) error {
 	species := cache.NewSpecies(pokeapi.New(), cfg.CacheTTL, time.Now)
 	scanner := scan.New(tesseract.Engine{Path: cfg.TesseractPath}, cards, species)
 
-	srv := newHTTPServer(cfg.Port, server.New(scanner, species, log))
+	var opts []server.Option
+	if cfg.SaveUploadsDir != "" {
+		log.Info("saving scanned photos for OCR tuning", "dir", cfg.SaveUploadsDir)
+		opts = append(opts, server.WithSaveUploads(cfg.SaveUploadsDir))
+	}
+	srv := newHTTPServer(cfg.Port, server.New(scanner, species, log, opts...))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

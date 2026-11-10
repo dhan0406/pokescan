@@ -52,8 +52,8 @@ var pikachu = pokeapi.Species{
 	Evolution:  pokeapi.EvolutionNode{Name: "pichu", EvolvesTo: []pokeapi.EvolutionNode{{Name: "pikachu"}}},
 }
 
-func newTestServer(sc Scanner, sp scan.SpeciesGetter) http.Handler {
-	return New(sc, sp, slog.New(slog.NewTextHandler(io.Discard, nil)))
+func newTestServer(sc Scanner, sp scan.SpeciesGetter, opts ...Option) http.Handler {
+	return New(sc, sp, slog.New(slog.NewTextHandler(io.Discard, nil)), opts...)
 }
 
 func do(t *testing.T, h http.Handler, method, path string, body io.Reader, contentType string) *httptest.ResponseRecorder {
