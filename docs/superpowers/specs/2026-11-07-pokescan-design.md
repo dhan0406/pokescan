@@ -47,12 +47,13 @@ The card viewer is a stack screen pushed over the tabs. Back returns to the came
 ### Scan
 
 - Full-screen camera preview (`expo-camera`) with a 2.5:3.5 card frame overlay and one shutter button.
-- On capture, resize to about 1200px on the long edge and compress before upload.
+- On capture, crop to the card frame, resize to about 1200px on the long edge, and compress before upload. The server reads fixed bands of this cropped image.
 - States:
   - Camera permission denied: plain explanation and a button that opens Settings.
   - Uploading: "Reading card…" with the preview frozen.
-  - Low-confidence match: "Which card is this?" picker with the top candidates.
-  - Could not read the card, or no connection: say what happened and offer a retry. No raw errors.
+  - Retake (`status: retake`): show a tip based on the reason (for example "Couldn't read the card number. Make sure the bottom edge is in the frame.") and return to the camera. After 3 retakes in a row, also offer "Pick from closest matches" when the server sent candidates.
+  - Several cards match (`status: choose`): "Which card is this?" picker with up to 5 candidates. A retake would not help here.
+  - No connection or server error: say what happened and offer a retry. No raw errors.
 
 ### Card viewer (handheld Pokédex look)
 
@@ -81,7 +82,7 @@ Defined in `openapi.yaml` at the repo root, which is the single source of truth.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /v1/scan` | Multipart image in. Returns the matched card, Pokémon details, a confidence score, and a short list of alternative candidates. |
+| `POST /v1/scan` | Multipart image in. Returns `status` (`match`, `choose` or `retake`) with the matched card and Pokémon details, candidates, or a retake reason. See the [scan endpoint design](2026-11-09-scan-endpoint-design.md). |
 | `GET /v1/pokemon/{idOrName}` | Species details and evolution chain |
 | `GET /v1/types` | List of types |
 | `GET /v1/types/{type}` | Pokémon of a type |
@@ -91,11 +92,11 @@ Errors use a structured body: `{ "code": "...", "message": "..." }`. The app map
 
 ## Scan pipeline
 
-1. Normalize and resize the image.
+1. Crop fixed bands from the uploaded (already card-framed) image and convert to grayscale.
 2. Run Tesseract on two regions: the name at the top and the collector number at the bottom (for example `004/165`).
 3. Query the Pokémon TCG API using name plus number.
-4. If OCR confidence is low or the match is ambiguous, return the top candidates and let the app show the picker instead of guessing.
-5. Enrich the match with PokéAPI species data.
+4. If a field is unreadable or low confidence, ask for a retake. If several real cards match, return up to 5 candidates for the picker instead of guessing.
+5. Enrich the match with PokéAPI species data, looked up by the card's National Pokédex number.
 
 An in-memory cache with a TTL sits in front of PokéAPI and TCG API calls, since that data rarely changes and both APIs are rate limited.
 
