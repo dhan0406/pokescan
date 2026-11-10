@@ -3,15 +3,24 @@
 Docs checked 2026-11-10: https://docs.runpod.io/serverless/load-balancing/overview
 
 ## 1. Build and push an x86 image
-Runpod runs linux/amd64; a Mac builds arm64 by default.
+Runpod runs linux/amd64; a Mac builds arm64 by default. Tag each image with the git
+commit, not `:latest`: Runpod workers can reuse a cached `:latest`, so a new push may not
+take effect, and a fixed tag shows exactly what is deployed and lets you roll back.
 
 ```
 docker login
-docker buildx build --platform linux/amd64 -t <dockerhub-user>/pokescan-api:latest --push backend
+TAG=$(git rev-parse --short HEAD)        # commit everything first so the tag matches the code
+docker buildx build --platform linux/amd64 -t <dockerhub-user>/pokescan-api:$TAG --push backend
+echo "image: <dockerhub-user>/pokescan-api:$TAG"
 ```
 
+To update later: build and push a new tag, then change the image tag on the endpoint
+(Serverless → your endpoint → edit) and save, which rolls out new workers. To roll back,
+set the previous tag. For an exact pin, use the digest shown after the push:
+`<dockerhub-user>/pokescan-api@sha256:...`.
+
 ## 2. Create the endpoint (console)
-Serverless → New Endpoint → Import from Docker Registry → `<dockerhub-user>/pokescan-api:latest`.
+Serverless → New Endpoint → Import from Docker Registry → `<dockerhub-user>/pokescan-api:<git-sha>` (the tag from step 1).
 - **Endpoint Type: Load Balancer.**
 - Environment variables: `PORT=8080`, `PORT_HEALTH=8081` (the image defaults to these).
 - Expose HTTP ports: `8080` (and `8081`).
