@@ -1,0 +1,200 @@
+openapi: 3.1.0
+info:
+  title: Pokescan API
+  version: 0.1.0
+  description: >
+    Reads a photo of a Pokémon card and returns the matched card and Pokémon
+    details. Every error response uses the ErrorBody shape.
+
+paths:
+  /v1/scan:
+    post:
+      operationId: scanCard
+      summary: Scan a card photo
+      description: >
+        Upload a photo cropped to the card frame. Every recognition outcome
+        (match, choose, retake) is a 200 response; only failures are errors.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: JPEG or PNG, at most 10 MB.
+      responses:
+        "200":
+          description: Recognition outcome.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScanResponse" }
+        "400": { $ref: "#/components/responses/BadImage" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "413": { $ref: "#/components/responses/ImageTooLarge" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "502": { $ref: "#/components/responses/UpstreamError" }
+        "504": { $ref: "#/components/responses/UpstreamTimeout" }
+
+  /v1/pokemon/{idOrName}:
+    get:
+      operationId: getPokemon
+      summary: Get a Pokémon species by National Pokédex number or name
+      parameters:
+        - name: idOrName
+          in: path
+          required: true
+          schema: { type: string }
+          example: "25"
+      responses:
+        "200":
+          description: The Pokémon.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pokemon" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "502": { $ref: "#/components/responses/UpstreamError" }
+        "504": { $ref: "#/components/responses/UpstreamTimeout" }
+
+  /ping:
+    get:
+      operationId: ping
+      summary: Health check
+      responses:
+        "200":
+          description: The server is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+
+components:
+  schemas:
+    Card:
+      type: object
+      required: [id, name, number, setName, setTotal, imageUrl, dexNumber]
+      properties:
+        id: { type: string, example: base1-58 }
+        name: { type: string, example: Pikachu }
+        number: { type: string, example: "58" }
+        setName: { type: string, example: Base }
+        setTotal: { type: integer, example: 102 }
+        imageUrl: { type: string, format: uri }
+        dexNumber:
+          type: integer
+          description: National Pokédex number; 0 for Trainer and Energy cards.
+          example: 25
+
+    Evolution:
+      type: object
+      required: [name, evolvesTo]
+      properties:
+        name: { type: string, example: pichu }
+        evolvesTo:
+          type: array
+          items: { $ref: "#/components/schemas/Evolution" }
+
+    Pokemon:
+      type: object
+      required: [id, name, types, stats, flavorText, evolution]
+      properties:
+        id: { type: integer, example: 25 }
+        name: { type: string, example: pikachu }
+        types:
+          type: array
+          items: { type: string }
+          example: [electric]
+        stats:
+          type: object
+          description: Base stats keyed by name (hp, attack, defense, special-attack, special-defense, speed).
+          additionalProperties: { type: integer }
+        flavorText:
+          type: string
+          description: First English Pokédex entry; empty when there is none.
+        evolution: { $ref: "#/components/schemas/Evolution" }
+
+    ScanResponse:
+      type: object
+      required: [status]
+      description: >
+        card and pokemon are present only for match (pokemon is omitted for
+        Trainer and Energy cards). candidates is present for choose and
+        optionally for retake. reason is present only for retake.
+      properties:
+        status:
+          type: string
+          enum: [match, choose, retake]
+        card: { $ref: "#/components/schemas/Card" }
+        pokemon: { $ref: "#/components/schemas/Pokemon" }
+        candidates:
+          type: array
+          maxItems: 5
+          items: { $ref: "#/components/schemas/Card" }
+        reason:
+          type: string
+          enum: [name_unreadable, number_unreadable, card_unreadable, not_found]
+
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - bad_image
+            - image_too_large
+            - not_found
+            - method_not_allowed
+            - ocr_failed
+            - internal_error
+            - upstream_error
+            - upstream_timeout
+        message:
+          type: string
+          description: Plain-language message safe to show to users.
+
+  responses:
+    BadImage:
+      description: Missing image field, or not a usable JPEG or PNG (code bad_image).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    ImageTooLarge:
+      description: Upload over 10 MB (code image_too_large).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    NotFound:
+      description: No such Pokémon or path (code not_found).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    MethodNotAllowed:
+      description: Wrong HTTP method (code method_not_allowed).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    ServerError:
+      description: OCR failed (ocr_failed) or an unexpected error (internal_error).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    UpstreamError:
+      description: A card or Pokémon data service failed (code upstream_error).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+    UpstreamTimeout:
+      description: OCR or a data service took too long (code upstream_timeout).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
