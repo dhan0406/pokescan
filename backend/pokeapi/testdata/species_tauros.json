@@ -1,0 +1,42 @@
+{
+ "evolution_chain": {
+  "url": "https://pokeapi.co/api/v2/evolution-chain/63/"
+ },
+ "flavor_text_entries": [
+  {
+   "flavor_text": "Apr\u00e8s avoir choisi sa cible, il fonce\ndessus t\u00eate baiss\u00e9e. Il est r\u00e9put\u00e9\npour sa nature violente.",
+   "language": {
+    "name": "fr",
+    "url": "https://pokeapi.co/api/v2/language/5/"
+   },
+   "version": {
+    "name": "black",
+    "url": "https://pokeapi.co/api/v2/version/17/"
+   }
+  },
+  {
+   "flavor_text": "When it targets\nan enemy, it\ncharges furiously\fwhile whipping its\nbody with its\nlong tails.",
+   "language": {
+    "name": "en",
+    "url": "https://pokeapi.co/api/v2/language/9/"
+   },
+   "version": {
+    "name": "red",
+    "url": "https://pokeapi.co/api/v2/version/1/"
+   }
+  },
+  {
+   "flavor_text": "When it targets\nan enemy, it\ncharges furiously\fwhile whipping its\nbody with its\nlong tails.",
+   "language": {
+    "name": "en",
+    "url": "https://pokeapi.co/api/v2/language/9/"
+   },
+   "version": {
+    "name": "blue",
+    "url": "https://pokeapi.co/api/v2/version/2/"
+   }
+  }
+ ],
+ "id": 128,
+ "name": "tauros"
+}

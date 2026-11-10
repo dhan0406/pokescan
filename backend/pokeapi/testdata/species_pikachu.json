@@ -1,0 +1,42 @@
+{
+ "evolution_chain": {
+  "url": "https://pokeapi.co/api/v2/evolution-chain/10/"
+ },
+ "flavor_text_entries": [
+  {
+   "flavor_text": "Il lui arrive de remettre d\u2019aplomb\nun Pikachu alli\u00e9 en lui envoyant\nune d\u00e9charge \u00e9lectrique.",
+   "language": {
+    "name": "fr",
+    "url": "https://pokeapi.co/api/v2/language/5/"
+   },
+   "version": {
+    "name": "black",
+    "url": "https://pokeapi.co/api/v2/version/17/"
+   }
+  },
+  {
+   "flavor_text": "When several of\nthese POK\u00e9MON\ngather, their\felectricity could\nbuild and cause\nlightning storms.",
+   "language": {
+    "name": "en",
+    "url": "https://pokeapi.co/api/v2/language/9/"
+   },
+   "version": {
+    "name": "red",
+    "url": "https://pokeapi.co/api/v2/version/1/"
+   }
+  },
+  {
+   "flavor_text": "When several of\nthese POK\u00e9MON\ngather, their\felectricity could\nbuild and cause\nlightning storms.",
+   "language": {
+    "name": "en",
+    "url": "https://pokeapi.co/api/v2/language/9/"
+   },
+   "version": {
+    "name": "blue",
+    "url": "https://pokeapi.co/api/v2/version/2/"
+   }
+  }
+ ],
+ "id": 25,
+ "name": "pikachu"
+}

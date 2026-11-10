@@ -1,0 +1,42 @@
+{
+ "evolution_chain": {
+  "url": "https://pokeapi.co/api/v2/evolution-chain/67/"
+ },
+ "flavor_text_entries": [
+  {
+   "flavor_text": "Son ADN particulier lui permet de\ns\u2019adapter tr\u00e8s rapidement \u00e0 son\nenvironnement.",
+   "language": {
+    "name": "fr",
+    "url": "https://pokeapi.co/api/v2/language/5/"
+   },
+   "version": {
+    "name": "black",
+    "url": "https://pokeapi.co/api/v2/version/17/"
+   }
+  },
+  {
+   "flavor_text": "Its genetic code\nis irregular.\nIt may mutate if\fit is exposed to\nradiation from\nelement STONEs.",
+   "language": {
+    "name": "en",
+    "url": "https://pokeapi.co/api/v2/language/9/"
+   },
+   "version": {
+    "name": "red",
+    "url": "https://pokeapi.co/api/v2/version/1/"
+   }
+  },
+  {
+   "flavor_text": "Its genetic code\nis irregular.\nIt may mutate if\fit is exposed to\nradiation from\nelement STONEs.",
+   "language": {
+    "name": "en",
+    "url": "https://pokeapi.co/api/v2/language/9/"
+   },
+   "version": {
+    "name": "blue",
+    "url": "https://pokeapi.co/api/v2/version/2/"
+   }
+  }
+ ],
+ "id": 133,
+ "name": "eevee"
+}
