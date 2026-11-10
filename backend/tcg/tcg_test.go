@@ -58,12 +58,13 @@ func TestFindCards_mapsFields(t *testing.T) {
 		t.Fatal("no cards returned")
 	}
 	want := Card{
-		ID:       "basep-25",
-		Name:     "Flying Pikachu",
-		Number:   "25",
-		SetName:  "Wizards Black Star Promos",
-		SetTotal: 53,
-		ImageURL: "https://images.pokemontcg.io/basep/25_hires.png",
+		ID:        "basep-25",
+		Name:      "Flying Pikachu",
+		Number:    "25",
+		SetName:   "Wizards Black Star Promos",
+		SetTotal:  53,
+		ImageURL:  "https://images.pokemontcg.io/basep/25_hires.png",
+		DexNumber: 25,
 	}
 	if cards[0] != want {
 		t.Errorf("cards[0] = %+v, want %+v", cards[0], want)
@@ -242,5 +243,85 @@ func TestFindCards_blankNameSkipsRequest(t *testing.T) {
 	cards, err := NewClient(f.URL, "", f.Client()).FindCards(context.Background(), "   ", "25")
 	if err != nil || cards == nil || len(cards) != 0 || len(f.queries) != 0 {
 		t.Errorf("got %#v, %v, %d requests; want empty slice, nil, 0", cards, err, len(f.queries))
+	}
+}
+
+func TestFindCards_trainerHasNoDexNumber(t *testing.T) {
+	b, err := os.ReadFile("testdata/cards_trainer.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newFake(t, 200, b)
+	cards, err := NewClient(f.URL, "", f.Client()).FindCards(context.Background(), "Professor's Research", "62")
+	if err != nil || len(cards) != 1 {
+		t.Fatalf("FindCards = %v, %v", cards, err)
+	}
+	if cards[0].DexNumber != 0 {
+		t.Errorf("DexNumber = %d, want 0", cards[0].DexNumber)
+	}
+}
+
+func TestFindCards_selectIncludesDex(t *testing.T) {
+	var sel string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sel = r.URL.Query().Get("select")
+		w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+	NewClient(srv.URL, "", srv.Client()).FindCards(context.Background(), "Pikachu", "25")
+	if !strings.Contains(sel, "nationalPokedexNumbers") {
+		t.Errorf("select = %q, want it to include nationalPokedexNumbers", sel)
+	}
+}
+
+func TestSearch_queryBuilding(t *testing.T) {
+	tests := []struct {
+		name string
+		q    Query
+		want string
+	}{
+		{"name only", Query{Name: "Pikachu"}, `name:"Pikachu"`},
+		{"number only", Query{Number: "025"}, `number:25`},
+		{"number and total", Query{Number: "025", SetTotal: 165}, `number:25 set.printedTotal:165`},
+		{"name and prefixed number", Query{Name: "Pikachu", Number: "TG05"}, `name:"Pikachu" number:TG05`},
+		{"quoted name", Query{Name: `Say "hi"`}, `name:"Say \"hi\""`},
+		{"trimmed", Query{Name: " Pikachu ", Number: " 25 "}, `name:"Pikachu" number:25`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFake(t, 200, []byte(`{"data":[]}`))
+			if _, err := NewClient(f.URL, "", f.Client()).Search(context.Background(), tt.q); err != nil {
+				t.Fatalf("Search: %v", err)
+			}
+			if len(f.queries) != 1 || f.queries[0] != tt.want {
+				t.Errorf("q = %q, want [%s]", f.queries, tt.want)
+			}
+		})
+	}
+}
+
+func TestSearch_mapsCards(t *testing.T) {
+	f := newFake(t, 200, fixture(t))
+	cards, err := NewClient(f.URL, "", f.Client()).Search(context.Background(), Query{Name: "Pikachu"})
+	if err != nil || len(cards) == 0 || cards[0].ID != "basep-25" || cards[0].DexNumber != 25 {
+		t.Errorf("Search = %+v, %v; want mapped fixture cards", cards, err)
+	}
+}
+
+func TestSearch_emptyOrInvalidSkipsRequest(t *testing.T) {
+	for _, q := range []Query{{}, {Name: "  "}, {Number: "025/185"}, {Name: "Pikachu", Number: "25 OR x"}} {
+		f := newFake(t, 200, fixture(t))
+		cards, err := NewClient(f.URL, "", f.Client()).Search(context.Background(), q)
+		if err != nil || cards == nil || len(cards) != 0 || len(f.queries) != 0 {
+			t.Errorf("Search(%+v) = %#v, %v, %d requests; want empty slice, nil, 0", q, cards, err, len(f.queries))
+		}
+	}
+}
+
+func TestSearch_errorsMapped(t *testing.T) {
+	f := newFake(t, 500, nil)
+	_, err := NewClient(f.URL, "", f.Client()).Search(context.Background(), Query{Name: "A"})
+	if !errors.Is(err, apierr.ErrUpstream) {
+		t.Errorf("err = %v, want ErrUpstream", err)
 	}
 }
