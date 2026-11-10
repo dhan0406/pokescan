@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/png"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/dhan0406/pokescan/backend/apierr"
@@ -71,8 +72,98 @@ func cardPNG(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
+// read builds a Result whose words all have the same confidence.
 func read(text string, conf float64) tesseract.Result {
-	return tesseract.Result{Text: text, Confidence: conf}
+	r := tesseract.Result{Text: text, Confidence: conf}
+	for _, w := range strings.Fields(text) {
+		r.Words = append(r.Words, tesseract.Word{Text: w, Confidence: conf})
+	}
+	return r
+}
+
+// words builds a Result from words with individual confidences, with the
+// band mean in Confidence as Tesseract reports it.
+func words(ws ...tesseract.Word) tesseract.Result {
+	r := tesseract.Result{Words: ws}
+	var texts []string
+	for _, w := range ws {
+		texts = append(texts, w.Text)
+		r.Confidence += w.Confidence / float64(len(ws))
+	}
+	r.Text = strings.Join(texts, " ")
+	return r
+}
+
+func TestScan_thresholdUsesTheExtractedWords(t *testing.T) {
+	w := func(text string, conf float64) tesseract.Word { return tesseract.Word{Text: text, Confidence: conf} }
+	tests := []struct {
+		name       string
+		nameRead   tesseract.Result
+		numberRead tesseract.Result
+		wantStatus string
+		wantReason string
+		wantFind   [][2]string
+		wantSearch []tcg.Query
+	}{
+		{
+			// Band mean is about 80, carried by the copyright strip, but the
+			// number itself was read at 46: it must not count.
+			name:       "confident boilerplate does not vouch for a shaky number",
+			nameRead:   read("Pikachu", 90),
+			numberRead: words(w("O25/l65", 46), w("Pokemon", 90), w("Nintendo", 93), w("Creatures", 90)),
+			wantStatus: StatusRetake, wantReason: ReasonNumberUnreadable,
+			wantSearch: []tcg.Query{{Name: "Pikachu"}},
+		},
+		{
+			// Band mean is about 42, dragged down by the copyright strip, but
+			// the number itself was read at 95: it must count.
+			name:       "shaky boilerplate does not sink a clear number",
+			nameRead:   read("Pikachu", 90),
+			numberRead: words(w("025/165", 95), w("©2023", 10), w("Pokemon", 20)),
+			wantStatus: StatusMatch,
+			wantFind:   [][2]string{{"Pikachu", "025"}},
+		},
+		{
+			name:       "number split across words uses those words only",
+			nameRead:   read("Pikachu", 90),
+			numberRead: words(w("Illus.", 15), w("025", 92), w("/", 88), w("165", 90), w("©2023", 10)),
+			wantStatus: StatusMatch,
+			wantFind:   [][2]string{{"Pikachu", "025"}},
+		},
+		{
+			name:       "multi-word name ignores the HP label",
+			nameRead:   words(w("Charizard", 90), w("ex", 80), w("HP", 30), w("330", 20)),
+			numberRead: read("125/197", 90),
+			wantStatus: StatusMatch,
+			wantFind:   [][2]string{{"Charizard ex", "125"}},
+		},
+		{
+			name:       "shaky name word is unread even if the rest is clear",
+			nameRead:   words(w("Basic", 95), w("Pikachv", 41), w("HP", 92), w("60", 95)),
+			numberRead: read("025/165", 90),
+			wantStatus: StatusRetake, wantReason: ReasonNameUnreadable,
+			wantSearch: []tcg.Query{{Number: "025", SetTotal: 165}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &fakeCards{find: cards(1), search: cards(1)}
+			got, err := New(&fakeOCR{results: []tesseract.Result{tt.nameRead, tt.numberRead}}, c, &fakeSpecies{}).
+				Scan(context.Background(), bytes.NewReader(cardPNG(t)))
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+			if got.Status != tt.wantStatus || got.Reason != tt.wantReason {
+				t.Errorf("status, reason = %q, %q; want %q, %q", got.Status, got.Reason, tt.wantStatus, tt.wantReason)
+			}
+			if !reflect.DeepEqual(c.findArgs, tt.wantFind) {
+				t.Errorf("FindCards calls = %v, want %v", c.findArgs, tt.wantFind)
+			}
+			if !reflect.DeepEqual(c.searchArgs, tt.wantSearch) {
+				t.Errorf("Search calls = %+v, want %+v", c.searchArgs, tt.wantSearch)
+			}
+		})
+	}
 }
 
 func cards(n int) []tcg.Card {

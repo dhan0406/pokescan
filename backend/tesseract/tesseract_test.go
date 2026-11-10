@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +70,10 @@ func TestRead_parsesWordsAndConfidence(t *testing.T) {
 	if got.Text != "Pikachu V" || got.Confidence != 80 {
 		t.Errorf("Read = %+v, want {Pikachu V 80}", got)
 	}
+	want := []Word{{"Pikachu", 90}, {"V", 70}}
+	if !reflect.DeepEqual(got.Words, want) {
+		t.Errorf("Words = %+v, want %+v", got.Words, want)
+	}
 }
 
 func TestRead_ignoresMinusOneRows(t *testing.T) {
@@ -77,7 +82,7 @@ func TestRead_ignoresMinusOneRows(t *testing.T) {
 		"4\t1\t1\t1\t1\t0\t0\t0\t400\t60\t-1\t\n"+
 		"5\t1\t1\t1\t1\t1\t10\t5\t120\t40\t88.5\tSnorlax\n")
 	got, err := fakeEngine(t).Read(context.Background(), []byte("x"))
-	if err != nil || got.Text != "Snorlax" || got.Confidence != 88.5 {
+	if err != nil || got.Text != "Snorlax" || got.Confidence != 88.5 || len(got.Words) != 1 {
 		t.Errorf("Read = %+v, %v; want {Snorlax 88.5}", got, err)
 	}
 }
@@ -85,7 +90,7 @@ func TestRead_ignoresMinusOneRows(t *testing.T) {
 func TestRead_noWords(t *testing.T) {
 	withTSV(t, header+"1\t1\t0\t0\t0\t0\t0\t0\t400\t60\t-1\t\n")
 	got, err := fakeEngine(t).Read(context.Background(), []byte("x"))
-	if err != nil || got != (Result{}) {
+	if err != nil || got.Text != "" || got.Confidence != 0 || len(got.Words) != 0 {
 		t.Errorf("Read = %+v, %v; want zero Result, nil", got, err)
 	}
 }

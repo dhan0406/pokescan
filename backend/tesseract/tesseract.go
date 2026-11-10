@@ -20,6 +20,13 @@ const defaultTimeout = 5 * time.Second
 type Result struct {
 	Text       string
 	Confidence float64
+	Words      []Word
+}
+
+// Word is one word Tesseract read, with its confidence (0-100).
+type Word struct {
+	Text       string
+	Confidence float64
 }
 
 // Engine runs the tesseract binary at Path. A zero Timeout means 5s.
@@ -61,11 +68,11 @@ func (e Engine) Read(ctx context.Context, png []byte) (Result, error) {
 	return parseTSV(stdout.String()), nil
 }
 
-// parseTSV joins the word rows (level 5) of Tesseract's TSV output and
-// averages their confidence. Rows with confidence -1 are not words.
+// parseTSV joins the word rows (level 5) of Tesseract's TSV output, keeping
+// each word's confidence and their mean. Rows with confidence -1 are not words.
 func parseTSV(tsv string) Result {
-	var words []string
-	var total float64
+	var r Result
+	var texts []string
 	for i, line := range strings.Split(tsv, "\n") {
 		if i == 0 || line == "" {
 			continue // header
@@ -79,11 +86,14 @@ func parseTSV(tsv string) Result {
 		if err != nil || conf < 0 || text == "" {
 			continue
 		}
-		words = append(words, text)
-		total += conf
+		r.Words = append(r.Words, Word{Text: text, Confidence: conf})
+		texts = append(texts, text)
+		r.Confidence += conf
 	}
-	if len(words) == 0 {
+	if len(r.Words) == 0 {
 		return Result{}
 	}
-	return Result{Text: strings.Join(words, " "), Confidence: total / float64(len(words))}
+	r.Text = strings.Join(texts, " ")
+	r.Confidence /= float64(len(r.Words))
+	return r
 }

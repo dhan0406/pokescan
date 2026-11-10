@@ -10,6 +10,7 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"strings"
 	"testing"
 	"time"
 )
@@ -153,5 +154,13 @@ func TestPrepare_rejectsTinyImage(t *testing.T) {
 	_, err := Prepare(bytes.NewReader(encodePNG(t, rowShaded(10, 10))), DefaultBands)
 	if !errors.Is(err, ErrBadImage) {
 		t.Errorf("err = %v, want ErrBadImage", err)
+	}
+}
+
+func TestPrepare_rejectsOverTwelveMegapixels(t *testing.T) {
+	// 4000x4000 is 16 MP: far beyond the ~1.5 MP the app sends, and as a
+	// 16-bit PNG it would decode to 128 MB.
+	if _, err := Prepare(bytes.NewReader(hugePNG(4000, 4000)), DefaultBands); !errors.Is(err, ErrBadImage) || !strings.Contains(err.Error(), "too large") {
+		t.Errorf("err = %v, want ErrBadImage for being too large", err)
 	}
 }

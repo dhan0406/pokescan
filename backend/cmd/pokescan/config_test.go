@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -40,5 +41,20 @@ func TestLoadConfig_badTTL(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "CACHE_TTL") {
 			t.Errorf("CACHE_TTL=%q: err = %v, want an error naming CACHE_TTL", v, err)
 		}
+	}
+}
+
+func TestNewHTTPServer_timeoutsFitTheRequestBudget(t *testing.T) {
+	srv := newHTTPServer("8080", http.NotFoundHandler())
+	if srv.Addr != ":8080" {
+		t.Errorf("Addr = %q, want :8080", srv.Addr)
+	}
+	if srv.ReadHeaderTimeout <= 0 || srv.ReadTimeout <= 0 || srv.IdleTimeout <= 0 {
+		t.Errorf("ReadHeader %v, Read %v, Idle %v: all must be set", srv.ReadHeaderTimeout, srv.ReadTimeout, srv.IdleTimeout)
+	}
+	// WriteTimeout runs from the end of the headers, so it must cover the
+	// whole upload plus the 20s handler deadline plus time to write the reply.
+	if min := srv.ReadTimeout + 20*time.Second + 5*time.Second; srv.WriteTimeout < min {
+		t.Errorf("WriteTimeout = %v, want at least %v", srv.WriteTimeout, min)
 	}
 }

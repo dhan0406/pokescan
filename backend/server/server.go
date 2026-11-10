@@ -52,7 +52,9 @@ func (s *server) ping(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) pokemon(w http.ResponseWriter, r *http.Request) {
-	sp, err := s.species.Species(r.Context(), r.PathValue("idOrName"))
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+	sp, err := s.species.Species(ctx, r.PathValue("idOrName"))
 	if err != nil {
 		writeError(w, s.log, err)
 		return
@@ -61,8 +63,10 @@ func (s *server) pokemon(w http.ResponseWriter, r *http.Request) {
 }
 
 const (
-	maxUpload   = 10 << 20 // 10 MB
-	scanTimeout = 20 * time.Second
+	maxUpload = 10 << 20 // 10 MB
+	// requestTimeout bounds the work a handler does after reading the request,
+	// so a slow upstream gives a 504 instead of a dropped connection.
+	requestTimeout = 20 * time.Second
 )
 
 func (s *server) scan(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +93,7 @@ func (s *server) scan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), scanTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 	defer cancel()
 	out, err := s.scanner.Scan(ctx, file)
 	if err != nil {

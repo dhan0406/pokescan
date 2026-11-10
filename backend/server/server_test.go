@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dhan0406/pokescan/backend/apierr"
 	"github.com/dhan0406/pokescan/backend/pokeapi"
@@ -34,11 +35,13 @@ func (f *fakeScanner) Scan(ctx context.Context, img io.Reader) (scan.Outcome, er
 }
 
 type fakeSpecies struct {
-	sp  pokeapi.Species
-	err error
+	sp     pokeapi.Species
+	err    error
+	gotCtx context.Context
 }
 
 func (f *fakeSpecies) Species(ctx context.Context, idOrName string) (pokeapi.Species, error) {
+	f.gotCtx = ctx
 	return f.sp, f.err
 }
 
@@ -179,5 +182,17 @@ func TestResponsesAreJSON(t *testing.T) {
 	rec := do(t, newTestServer(&fakeScanner{}, &fakeSpecies{err: apierr.ErrNotFound}), "GET", "/v1/pokemon/x", nil, "")
 	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
 		t.Errorf("error Content-Type = %q, want application/json", ct)
+	}
+}
+
+func TestPokemon_deadline(t *testing.T) {
+	sp := &fakeSpecies{sp: pikachu}
+	do(t, newTestServer(&fakeScanner{}, sp), "GET", "/v1/pokemon/pikachu", nil, "")
+	dl, ok := sp.gotCtx.Deadline()
+	if !ok {
+		t.Fatal("pokemon context has no deadline")
+	}
+	if left := time.Until(dl); left > 20*time.Second || left < 19*time.Second {
+		t.Errorf("deadline in %v, want about 20s", left)
 	}
 }

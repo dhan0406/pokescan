@@ -42,12 +42,7 @@ func run(log *slog.Logger) error {
 	species := cache.NewSpecies(pokeapi.New(), cfg.CacheTTL, time.Now)
 	scanner := scan.New(tesseract.Engine{Path: cfg.TesseractPath}, cards, species)
 
-	srv := &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           server.New(scanner, species, log),
-		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      30 * time.Second,
-	}
+	srv := newHTTPServer(cfg.Port, server.New(scanner, species, log))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -87,4 +82,19 @@ func (c cardSearcher) FindCards(ctx context.Context, name, number string) ([]tcg
 
 func (c cardSearcher) Search(ctx context.Context, q tcg.Query) ([]tcg.Card, error) {
 	return c.client.Search(ctx, q)
+}
+
+// newHTTPServer sets timeouts that fit the request budget. WriteTimeout runs
+// from the end of the request headers, so it must cover reading the upload
+// (ReadTimeout), the handler's 20s deadline and writing the reply; otherwise a
+// slow upload followed by a slow scan loses its response entirely.
+func newHTTPServer(port string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              ":" + port,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 }

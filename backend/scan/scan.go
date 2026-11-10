@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/dhan0406/pokescan/backend/apierr"
 	"github.com/dhan0406/pokescan/backend/ocr"
@@ -75,6 +76,37 @@ func New(o OCR, c CardSearcher, s SpeciesGetter) *Scanner {
 	return &Scanner{OCR: o, Cards: c, Species: s, Bands: imageprep.DefaultBands, MinConfidence: 60}
 }
 
+// numberKey extracts a number and total as one comparable string.
+func numberKey(text string) string {
+	n, t := ocr.ExtractNumber(text)
+	if n == "" {
+		return ""
+	}
+	return n + "/" + t
+}
+
+// sourceConfidence finds the shortest run of consecutive words from which
+// extract still produces want, and returns those words' mean confidence. If
+// no run does (the words don't line up with the text), it falls back to the
+// whole band's confidence.
+func sourceConfidence(r tesseract.Result, extract func(string) string, want string) float64 {
+	for size := 1; size <= len(r.Words); size++ {
+		for i := 0; i+size <= len(r.Words); i++ {
+			run := r.Words[i : i+size]
+			texts := make([]string, len(run))
+			var total float64
+			for j, w := range run {
+				texts[j] = w.Text
+				total += w.Confidence
+			}
+			if extract(strings.Join(texts, " ")) == want {
+				return total / float64(size)
+			}
+		}
+	}
+	return r.Confidence
+}
+
 // maxCandidates caps every candidate list.
 const maxCandidates = 5
 
@@ -95,13 +127,16 @@ func (s *Scanner) Scan(ctx context.Context, img io.Reader) (Outcome, error) {
 		return Outcome{}, fmt.Errorf("%w: number band: %w", ErrOCR, err)
 	}
 
-	// A field counts only if it was extracted and read confidently.
+	// A field counts only if it was extracted and the words it came from were
+	// read confidently. The band's overall confidence is not used: the number
+	// band also holds the illustrator and copyright text, which can make a
+	// shaky number look confident or a clear one look shaky.
 	var name, number, total string
-	if nameRead.Confidence >= s.MinConfidence {
-		name = ocr.ExtractName(nameRead.Text)
+	if n := ocr.ExtractName(nameRead.Text); n != "" && sourceConfidence(nameRead, ocr.ExtractName, n) >= s.MinConfidence {
+		name = n
 	}
-	if numberRead.Confidence >= s.MinConfidence {
-		number, total = ocr.ExtractNumber(numberRead.Text)
+	if n, t := ocr.ExtractNumber(numberRead.Text); n != "" && sourceConfidence(numberRead, numberKey, n+"/"+t) >= s.MinConfidence {
+		number, total = n, t
 	}
 
 	switch {

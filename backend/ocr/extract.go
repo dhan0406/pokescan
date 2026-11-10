@@ -56,9 +56,9 @@ var (
 	validNumber = regexp.MustCompile(`^(?:[A-Z]{2,5})?[0-9]{1,3}$`)
 )
 
-// ExtractNumber returns the collector number and set total from OCR text of the
-// bottom of a card, e.g. "004/165" gives ("004", "165"). Promo cards have no
-// total, e.g. "SWSH123" gives ("SWSH123", ""). Both are "" if none was found.
+// identifying card info (the collector number, set total) found on bottom left of card
+// e.g. "004/165" gives ("004", "165").
+// Promo cards have no total, e.g. "SWSH123" gives ("SWSH123", ""). Both are "" if none was found.
 func ExtractNumber(text string) (number, total string) {
 	for _, m := range slashPair.FindAllStringSubmatch(text, -1) {
 		n, t := normalizeNumber(m[1]), normalizeNumber(m[2])
@@ -72,10 +72,9 @@ func ExtractNumber(text string) (number, total string) {
 	return "", ""
 }
 
-// normalizeNumber fixes letters that OCR commonly confuses with digits
-// (O for 0, l or I for 1). A prefix of two or more letters followed by a digit,
-// like "TG" in "TG05", is a real prefix and is left alone.
+// tesseract OCR can confuse chars that look alike (O for 0, l or I for 1)
 func normalizeNumber(tok string) string {
+	//trims leading letters off of the left and compares lengths
 	letters := len(tok) - len(strings.TrimLeftFunc(tok, unicode.IsLetter))
 	if letters >= 2 && letters < len(tok) && unicode.IsDigit(rune(tok[letters])) {
 		return strings.ToUpper(tok[:letters]) + fixDigits(tok[letters:])
@@ -85,4 +84,5 @@ func normalizeNumber(tok string) string {
 
 var digitLookalikes = strings.NewReplacer("O", "0", "o", "0", "l", "1", "I", "1", "i", "1")
 
+// swaps O/o for 0 and l/I/i for 1, so O04 becomes 004 and l65 becomes 165
 func fixDigits(s string) string { return digitLookalikes.Replace(s) }

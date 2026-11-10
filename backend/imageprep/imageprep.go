@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	// maxPixels rejects images whose header declares more pixels than any
-	// phone photo needs, before they are decoded into memory.
-	maxPixels = 40_000_000
+	// maxPixels rejects images whose header declares more pixels than the
+	// app sends (about 1.5 MP), before they are decoded into memory. At 12 MP a
+	// 16-bit PNG still decodes to at most 96 MB.
+	maxPixels = 12_000_000
 	// minSide rejects images too small to hold readable text.
 	minSide = 100
 )
