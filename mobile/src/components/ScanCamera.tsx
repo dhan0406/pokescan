@@ -1,6 +1,6 @@
 import { useCameraPermissions } from 'expo-camera';
-import { useIsFocused } from 'expo-router';
-import { useState } from 'react';
+import { router, useIsFocused } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ApiClient } from '@/api/client';
@@ -16,6 +16,17 @@ export function ScanCamera({ api }: { api: ApiClient }) {
   const focused = useIsFocused();
   const { state, capture, reset } = useScan(api);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM); // kept here so it survives the camera remounting between scans
+
+  // A matched Pokémon card opens the viewer; the scan screen is ready again when the user comes back.
+  useEffect(() => {
+    if (state.phase === 'done' && state.response.status === 'match' && state.response.pokemon) {
+      router.push({
+        pathname: '/pokemon/[id]',
+        params: { id: String(state.response.pokemon.id), image: state.response.card?.imageUrl ?? '' },
+      });
+      reset();
+    }
+  }, [state, reset]);
 
   if (!permission) return <View style={styles.fill} />; // still loading
 

@@ -1,7 +1,21 @@
 import { Stack } from 'expo-router';
 
-// Tabs live in (tabs). The card viewer will be pushed over them as a stack
-// screen, so the root is a Stack.
+import { colors } from '@/theme/tokens';
+
+// Scan is the main screen; the Pokémon viewer is pushed over it.
 export default function RootLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen
+        name="pokemon/[id]"
+        options={{
+          headerShown: true,
+          title: '',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
+          headerShadowVisible: false,
+        }}
+      />
+    </Stack>
+  );
 }
