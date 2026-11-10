@@ -55,8 +55,8 @@ func TestPrepare_cropsBands(t *testing.T) {
 		png         []byte
 		top, bottom int // source rows
 	}{
-		{"name", r.Name, 28, 84},
-		{"number", r.Number, 644, 686},
+		{"name", r.Name, 35, 95},
+		{"number", r.Number, 620, 679},
 	}
 	for _, tt := range tests {
 		img := decodeRegion(t, tt.png)
@@ -86,7 +86,7 @@ func TestPrepare_acceptsJPEGAndPNG(t *testing.T) {
 			t.Errorf("%s: Prepare: %v", name, err)
 			continue
 		}
-		if decodeRegion(t, r.Name).Bounds().Dy() != 56 {
+		if decodeRegion(t, r.Name).Bounds().Dy() != 60 {
 			t.Errorf("%s: name band height wrong", name)
 		}
 	}

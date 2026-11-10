@@ -30,7 +30,7 @@ type Bands struct {
 }
 
 // DefaultBands assumes the photo is cropped to the card's frame.
-var DefaultBands = Bands{NameTop: 0.04, NameBottom: 0.12, NumberTop: 0.92, NumberBottom: 0.98}
+var DefaultBands = Bands{NameTop: 0.05, NameBottom: 0.135, NumberTop: 0.885, NumberBottom: 0.97}
 
 // Regions holds the two bands as PNG-encoded grayscale images.
 type Regions struct {
