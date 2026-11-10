@@ -11,6 +11,8 @@ export const apiSetup = setupApi(
   { EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL },
   {
     fetch: expoFetch as unknown as typeof fetch,
+    // Needed for Runpod endpoints. Note: anything EXPO_PUBLIC_* is readable by anyone with the app.
+    apiKey: process.env.EXPO_PUBLIC_API_KEY || undefined,
     // Shows the real cause in the Expo terminal; the app only shows a plain message.
     onError: (path, error) => console.warn(`[api] ${path} failed:`, error),
   },

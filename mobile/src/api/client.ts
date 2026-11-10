@@ -29,6 +29,16 @@ const CLIENT_MESSAGES = {
   bad_response: "The server sent a reply we couldn't read. Try again in a moment.",
 } as const;
 
+/** Internal: the server had no worker ready yet, so the request is worth repeating. */
+class ColdStart extends Error {
+  constructor(readonly status: number) {
+    super('no worker ready');
+  }
+  toApiError() {
+    return new ApiError('upstream_timeout', 'The server is waking up. Try again in a moment.', this.status);
+  }
+}
+
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
   readonly status?: number;
@@ -45,7 +55,11 @@ export type ApiClientOptions = {
   /** Server address, for example http://192.168.1.5:8080. A trailing slash is ignored. */
   baseUrl: string;
   fetch?: typeof fetch;
-  /** Timeout for POST /v1/scan, which includes OCR. Default 25 s. */
+  /** Sent as `Authorization: Bearer <apiKey>` (Runpod endpoints need it). */
+  apiKey?: string;
+  /** Wait between retries when Runpod has no worker ready yet. Default 5 s. */
+  retryDelayMs?: number;
+  /** Timeout for POST /v1/scan, which includes OCR and, on Runpod, a possible cold start. Default 120 s. */
   scanTimeoutMs?: number;
   /** Timeout for every other request. Default 10 s. */
   timeoutMs?: number;
@@ -64,13 +78,30 @@ export type ApiClient = {
 
 type RequestOptions = { method: 'GET' | 'POST'; body?: FormData; timeoutMs: number; signal?: AbortSignal };
 
+// Runpod answers {"error":"no workers available"} while a worker cold-starts.
+const isColdStart = (status: number, body: unknown) =>
+  status >= 500 && typeof body === 'object' && body !== null && typeof (body as { error?: unknown }).error === 'string';
+
 export function createApiClient(opts: ApiClientOptions): ApiClient {
   const baseUrl = opts.baseUrl.replace(/\/+$/, '');
   const doFetch: typeof fetch = opts.fetch ?? ((input, init) => fetch(input, init));
-  const scanTimeoutMs = opts.scanTimeoutMs ?? 25_000;
+  const scanTimeoutMs = opts.scanTimeoutMs ?? 120_000;
   const timeoutMs = opts.timeoutMs ?? 10_000;
+  const retryDelayMs = opts.retryDelayMs ?? 5_000;
 
   async function request(path: string, o: RequestOptions): Promise<unknown> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await requestOnce(path, o);
+      } catch (e) {
+        if (!(e instanceof ColdStart)) throw e;
+        if (attempt === 3) throw e.toApiError();
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
+    }
+  }
+
+  async function requestOnce(path: string, o: RequestOptions): Promise<unknown> {
     const controller = new AbortController();
     let timedOut = false;
     let cancelled = false;
@@ -89,7 +120,12 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       let res: Response;
       let text: string;
       try {
-        res = await doFetch(baseUrl + path, { method: o.method, body: o.body, signal: controller.signal });
+        res = await doFetch(baseUrl + path, {
+          method: o.method,
+          body: o.body,
+          signal: controller.signal,
+          headers: opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : undefined,
+        });
         text = await res.text();
       } catch (e) {
         if (timedOut) throw new ApiError('timeout', CLIENT_MESSAGES.timeout);
@@ -105,6 +141,7 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
         throw new ApiError('bad_response', CLIENT_MESSAGES.bad_response, res.status);
       }
 
+      if (isColdStart(res.status, parsed)) throw new ColdStart(res.status);
       if (!res.ok) throw serverError(parsed, res.status);
       return parsed;
     } finally {

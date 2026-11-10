@@ -46,6 +46,21 @@ func run(log *slog.Logger) error {
 	}
 	srv := newHTTPServer(cfg.Port, server.New(scanner, species, log, opts...))
 
+	if cfg.HealthPort != "" && cfg.HealthPort != cfg.Port {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"status":"ok"}`))
+		})
+		health := &http.Server{Addr: ":" + cfg.HealthPort, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+		go func() {
+			if err := health.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("health server stopped", "err", err)
+			}
+		}()
+		defer health.Close()
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errc := make(chan error, 1)

@@ -12,8 +12,9 @@ RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng ca-certificates \
  && adduser -D -u 10001 pokescan
 COPY --from=build /out/pokescan /usr/local/bin/pokescan
 USER pokescan
-ENV PORT=8080
-EXPOSE 8080
+# Runpod load balancing endpoints poll PORT_HEALTH for GET /ping.
+ENV PORT=8080 PORT_HEALTH=8081
+EXPOSE 8080 8081
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
   CMD wget -qO- "http://127.0.0.1:${PORT}/ping" >/dev/null || exit 1
 ENTRYPOINT ["pokescan"]
