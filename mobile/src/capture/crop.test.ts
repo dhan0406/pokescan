@@ -3,10 +3,10 @@ import { CARD_ASPECT, UPLOAD_LONG_EDGE, cropRectForPhoto, frameRect, uploadSize 
 const near = (actual: number, expected: number, tol = 1) => Math.abs(actual - expected) <= tol;
 
 describe('frameRect', () => {
-  it('is a centered 2.5:3.5 portrait frame at 80% of the view width', () => {
+  it('is a centered 2.5:3.5 portrait frame at 90% of the view width', () => {
     const f = frameRect({ width: 390, height: 844 });
-    expect(f.width).toBeCloseTo(312);
-    expect(f.height).toBeCloseTo(312 / CARD_ASPECT);
+    expect(f.width).toBeCloseTo(351);
+    expect(f.height).toBeCloseTo(351 / CARD_ASPECT);
     expect(f.originX).toBeCloseTo((390 - f.width) / 2);
     expect(f.originY).toBeCloseTo((844 - f.height) / 2);
   });
@@ -82,19 +82,19 @@ describe('cropRectForPhoto', () => {
 });
 
 describe('uploadSize', () => {
-  it('scales the long edge down to 1200 and keeps the aspect ratio', () => {
-    const size = uploadSize({ originX: 0, originY: 0, width: 1491, height: 2087 });
-    expect(UPLOAD_LONG_EDGE).toBe(1200);
-    expect(size.height).toBe(1200);
-    expect(near(size.width, (1491 / 2087) * 1200)).toBe(true);
+  it('scales the long edge down to 2000 and keeps the aspect ratio', () => {
+    const size = uploadSize({ originX: 0, originY: 0, width: 2300, height: 3220 });
+    expect(UPLOAD_LONG_EDGE).toBe(2000);
+    expect(size.height).toBe(2000);
+    expect(near(size.width, (2300 / 3220) * 2000)).toBe(true);
   });
 
   it('uses the width as the long edge for a landscape crop', () => {
     const size = uploadSize({ originX: 0, originY: 0, width: 3000, height: 2000 });
-    expect(size).toEqual({ width: 1200, height: 800 });
+    expect(size).toEqual({ width: 2000, height: 1333 });
   });
 
   it('never upscales', () => {
-    expect(uploadSize({ originX: 5, originY: 5, width: 600, height: 840 })).toEqual({ width: 600, height: 840 });
+    expect(uploadSize({ originX: 5, originY: 5, width: 1400, height: 1960 })).toEqual({ width: 1400, height: 1960 });
   });
 });

@@ -3,15 +3,19 @@ export type Rect = { originX: number; originY: number; width: number; height: nu
 
 /** A Pokémon card is 2.5 x 3.5 inches. */
 export const CARD_ASPECT = 2.5 / 3.5;
-/** Photos are resized so their long edge is this many pixels before upload. */
-export const UPLOAD_LONG_EDGE = 1200;
+/**
+ * Photos are resized so their long edge is at most this many pixels before
+ * upload. The collector number is tiny print, so keep plenty of pixels: at
+ * 1200 it is only about 8-12 px tall, too small for OCR to read reliably.
+ */
+export const UPLOAD_LONG_EDGE = 2000;
 
 /**
  * The card-shaped frame drawn over the camera, in view points: portrait,
  * centered, `widthFraction` of the view's width. If that would be taller than
  * the view, it shrinks to fit.
  */
-export function frameRect(view: Size, widthFraction = 0.8): Rect {
+export function frameRect(view: Size, widthFraction = 0.9): Rect {
   let width = view.width * widthFraction;
   let height = width / CARD_ASPECT;
   if (height > view.height) {

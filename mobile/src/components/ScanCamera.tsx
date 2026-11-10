@@ -1,12 +1,13 @@
 import { useCameraPermissions } from 'expo-camera';
 import { useIsFocused } from 'expo-router';
+import { useState } from 'react';
 import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ApiClient } from '@/api/client';
 import { useScan } from '@/scan/useScan';
 import { colors, spacing, type } from '@/theme/tokens';
 
-import { LiveCamera } from './LiveCamera';
+import { DEFAULT_ZOOM, LiveCamera } from './LiveCamera';
 import { PermissionPrompt } from './PermissionPrompt';
 
 /** Camera with a card frame and shutter, and the result of the last scan. */
@@ -14,6 +15,7 @@ export function ScanCamera({ api }: { api: ApiClient }) {
   const [permission, requestPermission] = useCameraPermissions();
   const focused = useIsFocused();
   const { state, capture, reset } = useScan(api);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM); // kept here so it survives the camera remounting between scans
 
   if (!permission) return <View style={styles.fill} />; // still loading
 
@@ -54,7 +56,7 @@ export function ScanCamera({ api }: { api: ApiClient }) {
   // mounted while the tab is out of focus.
   if (!focused) return <View style={styles.fill} />;
 
-  return <LiveCamera working={state.phase === 'working'} onShutter={capture} />;
+  return <LiveCamera working={state.phase === 'working'} zoom={zoom} onZoomChange={setZoom} onShutter={capture} />;
 }
 
 const styles = StyleSheet.create({

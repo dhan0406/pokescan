@@ -5,7 +5,7 @@ import { ApiError, type ApiClient, type ScanResponse } from '@/api/client';
 import { ScanCamera } from './ScanCamera';
 
 let mockFocused = true;
-let mockCameraProps: { onCameraReady?: () => void } = {};
+let mockCameraProps: { onCameraReady?: () => void; zoom?: number } = {};
 const mockDeleted: string[] = [];
 const mockTakePicture = jest.fn();
 const mockPrepareUpload = jest.fn();
@@ -15,7 +15,7 @@ jest.mock('expo-camera', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react');
   return {
-    CameraView: React.forwardRef(function MockCameraView(props: { onCameraReady?: () => void }, ref: React.Ref<unknown>) {
+    CameraView: React.forwardRef(function MockCameraView(props: { onCameraReady?: () => void; zoom?: number }, ref: React.Ref<unknown>) {
       mockCameraProps = props;
       React.useImperativeHandle(ref, () => ({ takePictureAsync: mockTakePicture }));
       return null;
@@ -126,5 +126,48 @@ describe('ScanCamera cleanup of cached photos', () => {
     await fireEvent.press(shutter());
     await waitFor(() => expect(screen.getByText('Try again')).toBeTruthy());
     expect(mockDeleted).toEqual([]);
+  });
+});
+
+describe('ScanCamera zoom', () => {
+  // A card is only 6 cm wide: filling the frame without zoom means holding the
+  // phone closer than most lenses can focus, so the camera starts zoomed in.
+  it('starts zoomed in', async () => {
+    await renderReadyCamera(fakeApi(jest.fn()));
+    expect(mockCameraProps.zoom).toBeGreaterThan(0);
+  });
+
+  it('zooms in and out in steps with the buttons', async () => {
+    await renderReadyCamera(fakeApi(jest.fn()));
+    const start = mockCameraProps.zoom as number;
+
+    await fireEvent.press(screen.getByLabelText('Zoom in'));
+    expect(mockCameraProps.zoom).toBeGreaterThan(start);
+
+    await fireEvent.press(screen.getByLabelText('Zoom out'));
+    await fireEvent.press(screen.getByLabelText('Zoom out'));
+    expect(mockCameraProps.zoom).toBeLessThan(start);
+  });
+
+  it('never goes below 0 or above the maximum, and disables the button at each end', async () => {
+    await renderReadyCamera(fakeApi(jest.fn()));
+    for (let i = 0; i < 40; i++) await fireEvent.press(screen.getByLabelText('Zoom out'));
+    expect(mockCameraProps.zoom).toBe(0);
+    expect(screen.getByLabelText('Zoom out')).toBeDisabled();
+
+    for (let i = 0; i < 40; i++) await fireEvent.press(screen.getByLabelText('Zoom in'));
+    expect(mockCameraProps.zoom).toBeLessThanOrEqual(0.6);
+    expect(screen.getByLabelText('Zoom in')).toBeDisabled();
+  });
+
+  it('keeps the chosen zoom for the next scan', async () => {
+    await renderReadyCamera(fakeApi(jest.fn().mockResolvedValue(retake)));
+    await fireEvent.press(screen.getByLabelText('Zoom in'));
+    const chosen = mockCameraProps.zoom;
+
+    await fireEvent.press(screen.getByLabelText('Take photo'));
+    await waitFor(() => expect(screen.getByText('Scan another card')).toBeTruthy());
+    await fireEvent.press(screen.getByText('Scan another card'));
+    expect(mockCameraProps.zoom).toBe(chosen);
   });
 });
